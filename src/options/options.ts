@@ -72,6 +72,78 @@ function setBusy(b: boolean): void {
   document.body.classList.toggle('busy', b)
 }
 
+/* ------------------------------- motion --------------------------------- */
+
+const reduced = matchMedia('(prefers-reduced-motion: reduce)')
+const EASE = 'cubic-bezier(0.22, 1, 0.36, 1)'
+
+/** Mark the button that started an async action, so feedback is local to it. */
+async function withPending<T>(btn: HTMLButtonElement, fn: () => Promise<T>): Promise<T> {
+  btn.classList.add('pending')
+  try {
+    return await fn()
+  } finally {
+    btn.classList.remove('pending')
+  }
+}
+
+const rowFor = (id: string) =>
+  rowsEl.querySelector<HTMLTableRowElement>(`tr[data-id="${CSS.escape(id)}"]`)
+
+/**
+ * Re-render, then slide rows from where they were to where they now are, so a
+ * sort or filter reads as the same data rearranging rather than replaced.
+ */
+function flipRender(mutate: () => void): void {
+  const rows = rowsEl.querySelectorAll<HTMLTableRowElement>('tr[data-id]')
+  if (reduced.matches || rows.length > 80) {
+    mutate()
+    return
+  }
+  const before = new Map<string, number>()
+  for (const tr of rows) before.set(tr.dataset['id']!, tr.getBoundingClientRect().top)
+
+  mutate()
+
+  for (const tr of rowsEl.querySelectorAll<HTMLTableRowElement>('tr[data-id]')) {
+    const prev = before.get(tr.dataset['id']!)
+    if (prev === undefined) {
+      tr.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 180, easing: EASE })
+      continue
+    }
+    const delta = prev - tr.getBoundingClientRect().top
+    if (Math.abs(delta) < 1) continue
+    tr.animate([{ transform: `translateY(${delta}px)` }, { transform: 'none' }], {
+      duration: 260,
+      easing: EASE,
+    })
+  }
+}
+
+/** Play rows out before they vanish, so a delete is visible, not instant. */
+async function animateRowsOut(ids: string[]): Promise<void> {
+  if (reduced.matches) return
+  const done = ids
+    .map(rowFor)
+    .filter((tr): tr is HTMLTableRowElement => tr !== null)
+    .map(
+      (tr) =>
+        tr.animate(
+          [
+            { opacity: 1, transform: 'none' },
+            { opacity: 0, transform: 'translateX(-12px)' },
+          ],
+          { duration: 160, easing: 'cubic-bezier(0.4, 0, 1, 1)', fill: 'forwards' }
+        ).finished
+    )
+  await Promise.allSettled(done)
+}
+
+function flashRow(id: string): void {
+  if (reduced.matches) return
+  rowFor(id)?.classList.add('flash')
+}
+
 function showNotice(text: string): void {
   noticeEl.hidden = false
   noticeEl.textContent = text
@@ -258,6 +330,7 @@ function profileRow(p: SessionProfile): HTMLTableRowElement {
   const s = profileStats(p)
   const tr = document.createElement('tr')
   tr.tabIndex = 0
+  tr.dataset['id'] = p.id
   if (selected.has(p.id)) tr.classList.add('selected')
 
   // selection
@@ -319,7 +392,7 @@ function profileRow(p: SessionProfile): HTMLTableRowElement {
   actions.className = 'row-actions'
 
   const switchBtn = iconButton('Switch', 'btn btn-primary', switchIcon())
-  switchBtn.addEventListener('click', () => void switchInto(p))
+  switchBtn.addEventListener('click', () => void withPending(switchBtn, () => switchInto(p)))
 
   const editBtn = iconButton('Edit', 'btn btn-icon', pencilIcon(), true)
   editBtn.addEventListener('click', () => {
@@ -328,7 +401,9 @@ function profileRow(p: SessionProfile): HTMLTableRowElement {
   })
 
   const delBtn = iconButton('Delete', 'btn btn-icon btn-danger', trashIcon(), true)
-  delBtn.addEventListener('click', () => void deleteProfiles([p.id], p.name))
+  delBtn.addEventListener('click', () =>
+    void withPending(delBtn, () => deleteProfiles([p.id], p.name))
+  )
 
   actions.append(switchBtn, editBtn, delBtn)
   tdActions.appendChild(actions)
@@ -393,6 +468,11 @@ function editorRow(p: SessionProfile): HTMLTableRowElement {
   tr.className = 'editor-row'
   const td = document.createElement('td')
   td.colSpan = 8
+
+  // shell → inner → editor: the shell animates 0fr→1fr, the inner clips.
+  const shell = document.createElement('div')
+  shell.className = 'editor-shell'
+  const inner = document.createElement('div')
 
   const box = document.createElement('div')
   box.className = 'editor'
@@ -466,9 +546,14 @@ function editorRow(p: SessionProfile): HTMLTableRowElement {
   }
 
   box.append(nameInput, swatches, emojiInput, save, cancel)
-  td.appendChild(box)
+  inner.appendChild(box)
+  shell.appendChild(inner)
+  td.appendChild(shell)
   tr.appendChild(td)
-  queueMicrotask(() => nameInput.focus())
+  requestAnimationFrame(() => {
+    shell.classList.add('open')
+    nameInput.focus()
+  })
   return tr
 }
 
@@ -509,6 +594,7 @@ async function applyEdit(
     setBusy(false)
   }
   await load()
+  flashRow(profileId)
 }
 
 async function deleteProfiles(ids: string[], label?: string): Promise<void> {
@@ -521,6 +607,7 @@ async function deleteProfiles(ids: string[], label?: string): Promise<void> {
   const caveat = hidden > 0 ? `\n\n${hidden} of them are not shown in the current view.` : ''
   if (!confirm(`Delete ${what}? The saved login(s) will be lost.${caveat}`)) return
   setBusy(true)
+  await animateRowsOut(ids)
   try {
     const res = await send({ type: 'deleteProfiles', profileIds: ids })
     if (!res.ok) {
@@ -593,11 +680,11 @@ function waitForTabLoad(tabId: number): Promise<void> {
 
 /* ------------------------------- events --------------------------------- */
 
-searchEl.addEventListener('input', () => renderRows())
+searchEl.addEventListener('input', () => flipRender(renderRows))
 searchEl.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
     searchEl.value = ''
-    renderRows()
+    flipRender(renderRows)
   }
 })
 
@@ -615,7 +702,7 @@ for (const b of document.querySelectorAll<HTMLButtonElement>('.segmented button'
     kind = (b.dataset['kind'] as Kind) ?? 'all'
     document.querySelectorAll('.segmented button').forEach((x) => x.classList.remove('on'))
     b.classList.add('on')
-    renderRows()
+    flipRender(renderRows)
   })
 }
 
