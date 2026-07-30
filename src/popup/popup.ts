@@ -18,6 +18,10 @@ const freshBtn = $<HTMLButtonElement>('fresh')
 const exportBtn = $<HTMLButtonElement>('export')
 const importBtn = $<HTMLButtonElement>('import-btn')
 const importFile = $<HTMLInputElement>('import-file')
+const manageAllBtn = $<HTMLButtonElement>('manage-all')
+
+// Available on every page, including ones we can't manage sessions on.
+manageAllBtn.addEventListener('click', () => chrome.runtime.openOptionsPage())
 
 let tabId = -1
 let siteKey = ''

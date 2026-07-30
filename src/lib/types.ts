@@ -42,11 +42,27 @@ export interface ImportProfilesRequest {
   json: string
 }
 
+/** Edits presentation fields only — never session data. */
+export interface UpdateProfileRequest {
+  type: 'updateProfile'
+  profileId: string
+  name: string
+  color: string
+  emoji?: string
+}
+
+export interface DeleteProfilesRequest {
+  type: 'deleteProfiles'
+  profileIds: string[]
+}
+
 export type BgRequest =
   | SwitchRequest
   | SaveNewRequest
   | DeleteProfileRequest
   | ImportProfilesRequest
+  | UpdateProfileRequest
+  | DeleteProfilesRequest
 
 export type BgResponse =
   | { ok: true; warnings: string[]; imported?: number }

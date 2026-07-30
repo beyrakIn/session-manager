@@ -11,6 +11,9 @@ a time.
 - Auto-save before every switch — logins are never silently lost
 - "Fresh session" = switch to a logged-out state
 - Toolbar badge shows how many profiles are saved for the current site
+- Dashboard (right-click the icon → Options, or "Manage all sessions" in the
+  popup) lists every saved session across every site, with rename/recolor,
+  bulk delete, storage stats, and switch-from-anywhere
 - Export/import all profiles as JSON (**the file contains login credentials —
   treat it like a password**)
 

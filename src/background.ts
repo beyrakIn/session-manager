@@ -22,10 +22,12 @@ import type {
   BgRequest,
   BgResponse,
   DeleteProfileRequest,
+  DeleteProfilesRequest,
   ImportProfilesRequest,
   SaveNewRequest,
   SessionProfile,
   SwitchRequest,
+  UpdateProfileRequest,
 } from './lib/types'
 
 const AUTO_SAVE_COLOR = '#9ca3af'
@@ -53,6 +55,10 @@ async function handle(msg: BgRequest): Promise<BgResponse> {
       return deleteProfileOp(msg)
     case 'importProfiles':
       return importProfilesOp(msg)
+    case 'updateProfile':
+      return updateProfileOp(msg)
+    case 'deleteProfiles':
+      return deleteProfilesOp(msg)
     default:
       return { ok: false, error: 'Unknown message type' }
   }
@@ -251,6 +257,35 @@ async function importProfilesOp({ json }: ImportProfilesRequest): Promise<BgResp
   const merged = mergeProfiles(await getProfiles(), imported)
   await saveProfiles(merged)
   return { ok: true, warnings: [], imported: imported.length }
+}
+
+async function updateProfileOp({
+  profileId,
+  name,
+  color,
+  emoji,
+}: UpdateProfileRequest): Promise<BgResponse> {
+  const profiles = await getProfiles()
+  const p = profiles.find((x) => x.id === profileId)
+  if (!p) return { ok: false, error: 'Profile not found' }
+  p.name = name
+  p.color = color
+  p.emoji = emoji
+  p.updatedAt = Date.now()
+  await saveProfiles(profiles)
+  return { ok: true, warnings: [] }
+}
+
+async function deleteProfilesOp({ profileIds }: DeleteProfilesRequest): Promise<BgResponse> {
+  const doomed = new Set(profileIds)
+  const profiles = await getProfiles()
+  await saveProfiles(profiles.filter((p) => !doomed.has(p.id)))
+  // Clear any site still pointing at a profile that no longer exists.
+  const active = await getActiveMap()
+  for (const [siteKey, id] of Object.entries(active)) {
+    if (id && doomed.has(id)) await setActive(siteKey, null)
+  }
+  return { ok: true, warnings: [] }
 }
 
 // ---- Toolbar badge: profile count for the site in the focused tab ----------

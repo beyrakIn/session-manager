@@ -260,6 +260,21 @@ form > button:hover { background: var(--accent-hover); }
   margin: 8px 2px 0;
 }
 
+/* "Manage all sessions" — a link, not a button, despite being one */
+.linkish {
+  display: block;
+  margin-top: 6px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.linkish:hover { text-decoration: underline; }
+
 /* Busy state — while a switch/save is in flight */
 body.busy li, body.busy .del { pointer-events: none; opacity: 0.55; }
 body.busy button { pointer-events: none; opacity: 0.75; }

@@ -66,6 +66,29 @@ real site (GitHub works well).
       navigating a tab to a different site
 - [ ] Badge shows nothing on `chrome://` pages
 
+## Dashboard (options page)
+- [ ] "Manage all sessions" in the popup opens the dashboard; right-click icon
+      → Options opens the same page
+- [ ] Every saved profile appears, grouped by site, sites A→Z and profiles
+      most-recently-updated first
+- [ ] Totals line matches reality (profile count, site count, storage size)
+- [ ] Search filters by site key, profile name and emoji
+- [ ] Edit → rename, change color, change emoji → Save persists, and the popup
+      shows the new name/color on that site
+- [ ] Saving an empty name is refused with a clear message
+- [ ] Select profiles across two different sites → selection bar counts them →
+      Delete removes exactly those, after one confirm
+- [ ] Deleting the profile that was active on a site clears its "active here"
+      marker (no stale checkmark in the popup)
+- [ ] Switch from the dashboard opens the site in a foreground tab and lands
+      logged into that profile
+- [ ] Switch on a site that is slow/unreachable reports an error instead of
+      hanging forever
+- [ ] Editing a profile in the popup updates an open dashboard tab without a
+      manual refresh
+- [ ] With zero profiles saved, the dashboard shows the getting-started empty
+      state; with a non-matching search, it shows the no-results state
+
 ## Regression basics
 - [ ] `npm test` passes
 - [ ] `npm run typecheck` passes

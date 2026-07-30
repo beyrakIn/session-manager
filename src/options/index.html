@@ -1,0 +1,31 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Session Manager — all sessions</title>
+    <link rel="stylesheet" href="./options.css" />
+  </head>
+  <body>
+    <main>
+      <header class="page-head">
+        <div>
+          <h1>All sessions</h1>
+          <p id="totals" class="totals">Loading…</p>
+        </div>
+        <input id="search" type="search" placeholder="Search sites and profiles" autocomplete="off" />
+      </header>
+
+      <div id="notice" hidden></div>
+
+      <section id="groups"></section>
+    </main>
+
+    <div id="selection-bar" hidden>
+      <span id="selection-count"></span>
+      <button id="clear-selection" type="button">Clear</button>
+      <button id="delete-selected" type="button" class="danger">Delete</button>
+    </div>
+
+    <script type="module" src="./options.ts"></script>
+  </body>
+</html>
