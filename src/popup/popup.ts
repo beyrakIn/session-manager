@@ -29,6 +29,17 @@ function setBusy(b: boolean): void {
   document.body.classList.toggle('busy', b)
 }
 
+// chrome.runtime.sendMessage's promise form REJECTS when there's no
+// receiver (e.g. the extension was reloaded while the popup stayed open) —
+// without this, that leaves busy stuck true and the caller unhandled.
+async function send(msg: unknown): Promise<BgResponse> {
+  try {
+    return (await chrome.runtime.sendMessage(msg)) as BgResponse
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) }
+  }
+}
+
 void init()
 
 async function init(): Promise<void> {
@@ -111,11 +122,11 @@ async function deleteProfile(p: SessionProfile): Promise<void> {
   if (!confirm(`Delete profile "${p.name}"? The saved login will be lost.`)) return
   setBusy(true)
   try {
-    const res = (await chrome.runtime.sendMessage({
+    const res = await send({
       type: 'deleteProfile',
       profileId: p.id,
       siteKey,
-    })) as BgResponse | undefined
+    })
     if (!res || !res.ok) {
       showNotice(`Delete failed: ${res ? res.error : 'no response from service worker'}`)
       return
@@ -129,12 +140,12 @@ async function deleteProfile(p: SessionProfile): Promise<void> {
 async function doSwitch(targetProfileId: string | null): Promise<void> {
   if (busy) return
   setBusy(true)
-  const res = (await chrome.runtime.sendMessage({
+  const res = await send({
     type: 'switch',
     tabId,
     siteKey,
     targetProfileId,
-  })) as BgResponse | undefined
+  })
   if (!res || !res.ok) {
     setBusy(false)
     showNotice(`Switch failed: ${res ? res.error : 'no response from service worker'}`)
@@ -160,14 +171,14 @@ function wireSessionEvents(): void {
         return
       }
       setBusy(true)
-      const res = (await chrome.runtime.sendMessage({
+      const res = await send({
         type: 'saveNew',
         tabId,
         siteKey,
         name,
         color: selectedColor,
         emoji: emojiEl.value.trim() || undefined,
-      })) as BgResponse | undefined
+      })
       if (!res || !res.ok) {
         setBusy(false)
         showNotice(`Save failed: ${res ? res.error : 'no response from service worker'}`)
@@ -209,16 +220,15 @@ function wireTransferEvents(): void {
       setBusy(true)
       try {
         const json = await file.text()
-        const res = (await chrome.runtime.sendMessage({
-          type: 'importProfiles',
-          json,
-        })) as BgResponse | undefined
+        const res = await send({ type: 'importProfiles', json })
         if (!res || !res.ok) {
           showNotice(`Import failed: ${res ? res.error : 'no response from service worker'}`)
           return
         }
         showNotice(`Imported ${res.imported ?? 0} profile(s).`)
         if (siteKey) await renderList()
+      } catch (e) {
+        showNotice(`Import failed: ${e instanceof Error ? e.message : String(e)}`)
       } finally {
         importFile.value = ''
         setBusy(false)
