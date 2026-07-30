@@ -51,6 +51,14 @@ real site (GitHub works well).
 - [ ] On a site whose login lives in localStorage (SPA token auth), save/switch
       round-trips the login correctly
 
+## Toolbar badge
+- [ ] Toolbar icon shows a count badge equal to the number of profiles saved
+      for the current tab's site; no badge on sites with zero profiles
+- [ ] Badge updates immediately after saving, deleting, and importing profiles
+- [ ] Badge updates when switching between tabs on different sites, and after
+      navigating a tab to a different site
+- [ ] Badge shows nothing on `chrome://` pages
+
 ## Regression basics
 - [ ] `npm test` passes
 - [ ] `npm run typecheck` passes

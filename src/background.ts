@@ -1,5 +1,11 @@
 import { cookieUrl, toSetParams, type CapturedCookie } from './lib/cookies'
-import { applyAutoSave, newProfile, type SessionSnapshot } from './lib/profiles'
+import {
+  applyAutoSave,
+  countProfilesForSite,
+  newProfile,
+  type SessionSnapshot,
+} from './lib/profiles'
+import { siteKeyFromUrl } from './lib/site'
 import { getActiveMap, getProfiles, saveProfiles, setActive } from './lib/store'
 import { mergeProfiles, parseImport } from './lib/transfer'
 import {
@@ -210,3 +216,41 @@ async function importProfilesOp({ json }: ImportProfilesRequest): Promise<BgResp
   await saveProfiles(merged)
   return { ok: true, warnings: [], imported: imported.length }
 }
+
+// ---- Toolbar badge: profile count for the site in the focused tab ----------
+
+void chrome.action.setBadgeBackgroundColor({ color: '#3b82f6' })
+
+async function updateBadge(tabId: number, url: string | undefined): Promise<void> {
+  const key = url ? siteKeyFromUrl(url) : null
+  const n = key ? countProfilesForSite(await getProfiles(), key) : 0
+  try {
+    await chrome.action.setBadgeText({ tabId, text: n > 0 ? String(n) : '' })
+  } catch {
+    /* tab closed between the event and this call — nothing to update */
+  }
+}
+
+chrome.tabs.onActivated.addListener(({ tabId }) => {
+  chrome.tabs
+    .get(tabId)
+    .then((tab) => updateBadge(tabId, tab.url))
+    .catch(() => undefined)
+})
+
+// Navigation clears a tab-scoped badge — re-derive it for the new URL.
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  if (changeInfo.url || changeInfo.status === 'loading') void updateBadge(tabId, tab.url)
+})
+
+// Save/delete/import/auto-save all land in the 'profiles' storage key —
+// refresh the badge on every active tab (one per window) when it changes.
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== 'local' || !changes['profiles']) return
+  chrome.tabs
+    .query({ active: true })
+    .then((tabs) => {
+      for (const t of tabs) if (t.id !== undefined) void updateBadge(t.id, t.url)
+    })
+    .catch(() => undefined)
+})

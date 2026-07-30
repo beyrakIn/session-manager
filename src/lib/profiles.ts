@@ -21,6 +21,10 @@ export function newProfile(init: {
   return { ...init, id: crypto.randomUUID(), createdAt: now, updatedAt: now }
 }
 
+export function countProfilesForSite(profiles: SessionProfile[], siteKey: string): number {
+  return profiles.filter((p) => p.siteKey === siteKey).length
+}
+
 export interface SessionSnapshot {
   cookies: CapturedCookie[]
   localStorage: Record<string, string>

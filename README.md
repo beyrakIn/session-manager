@@ -10,6 +10,7 @@ a time.
 - Switch profiles: the page reloads into the other account
 - Auto-save before every switch — logins are never silently lost
 - "Fresh session" = switch to a logged-out state
+- Toolbar badge shows how many profiles are saved for the current site
 - Export/import all profiles as JSON (**the file contains login credentials —
   treat it like a password**)
 

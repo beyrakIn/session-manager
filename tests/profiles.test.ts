@@ -1,5 +1,20 @@
 import { expect, test } from 'vitest'
-import { applyAutoSave, autoSaveName, newProfile, type SessionSnapshot } from '../src/lib/profiles'
+import {
+  applyAutoSave,
+  autoSaveName,
+  countProfilesForSite,
+  newProfile,
+  type SessionSnapshot,
+} from '../src/lib/profiles'
+
+test('countProfilesForSite counts only matching-site profiles', () => {
+  const make = (siteKey: string) =>
+    newProfile({ siteKey, name: 'X', color: '#000', cookies: [], localStorage: {}, sessionStorage: {} })
+  const profiles = [make('a.com'), make('b.com'), make('a.com')]
+  expect(countProfilesForSite(profiles, 'a.com')).toBe(2)
+  expect(countProfilesForSite(profiles, 'c.com')).toBe(0)
+  expect(countProfilesForSite([], 'a.com')).toBe(0)
+})
 
 test('autoSaveName formats as Auto-saved YYYY-MM-DD HH:MM', () => {
   expect(autoSaveName(new Date(2026, 6, 30, 9, 5))).toBe('Auto-saved 2026-07-30 09:05')
