@@ -5,6 +5,10 @@ test('autoSaveName formats as Auto-saved YYYY-MM-DD HH:MM', () => {
   expect(autoSaveName(new Date(2026, 6, 30, 9, 5))).toBe('Auto-saved 2026-07-30 09:05')
 })
 
+test('autoSaveName zero-pads single-digit month/day and midnight', () => {
+  expect(autoSaveName(new Date(2026, 0, 5, 0, 0))).toBe('Auto-saved 2026-01-05 00:00')
+})
+
 test('newProfile fills id and timestamps', () => {
   const p = newProfile({
     siteKey: 'github.com',

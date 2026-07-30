@@ -18,5 +18,5 @@ export function newProfile(init: {
   sessionStorage: Record<string, string>
 }): SessionProfile {
   const now = Date.now()
-  return { id: crypto.randomUUID(), createdAt: now, updatedAt: now, ...init }
+  return { ...init, id: crypto.randomUUID(), createdAt: now, updatedAt: now }
 }

@@ -32,6 +32,23 @@ test('parseImport rejects malformed profiles', () => {
   expect(() => parseImport(bad)).toThrow('invalid profile')
 })
 
+test('parseImport rejects profiles missing web storage maps', () => {
+  const noLs = JSON.stringify({
+    app: 'session-manager',
+    version: 1,
+    profiles: [{ id: 'x', siteKey: 'a.com', name: 'A', cookies: [], sessionStorage: {} }],
+  })
+  const nullSs = JSON.stringify({
+    app: 'session-manager',
+    version: 1,
+    profiles: [
+      { id: 'x', siteKey: 'a.com', name: 'A', cookies: [], localStorage: {}, sessionStorage: null },
+    ],
+  })
+  expect(() => parseImport(noLs)).toThrow('invalid profile')
+  expect(() => parseImport(nullSs)).toThrow('invalid profile')
+})
+
 test('mergeProfiles: imported entry wins on id collision, others appended', () => {
   const a = sample()
   const b = sample()
