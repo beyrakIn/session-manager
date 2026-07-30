@@ -55,4 +55,4 @@ with a new effective date.
 
 ## Contact
 
-Questions about this policy: fields@exploit.az
+Questions about this policy: play@pwn.az
