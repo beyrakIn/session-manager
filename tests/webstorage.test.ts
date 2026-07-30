@@ -35,3 +35,9 @@ test('clear empties both storages', () => {
   expect(window.localStorage.length).toBe(0)
   expect(window.sessionStorage.length).toBe(0)
 })
+
+test('captures a key literally named __proto__', () => {
+  window.localStorage.setItem('__proto__', 'v')
+  const r = readStoragesInPage()
+  expect(Object.entries(r.localStorage)).toContainEqual(['__proto__', 'v'])
+})

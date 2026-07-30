@@ -7,12 +7,14 @@ export function readStoragesInPage(): {
   sessionStorage: Record<string, string>
 } {
   const dump = (s: Storage) => {
-    const out: Record<string, string> = {}
+    const entries: [string, string][] = []
     for (let i = 0; i < s.length; i++) {
       const k = s.key(i)!
-      out[k] = s.getItem(k)!
+      entries.push([k, s.getItem(k)!])
     }
-    return out
+    // Object.fromEntries defines own properties, so a key literally named
+    // "__proto__" is captured instead of hitting the prototype setter.
+    return Object.fromEntries(entries) as Record<string, string>
   }
   return {
     localStorage: dump(window.localStorage),

@@ -17,6 +17,9 @@ export async function getActiveMap(): Promise<Record<string, string | null>> {
   return (r[ACTIVE_KEY] as Record<string, string | null> | undefined) ?? {}
 }
 
+// NOTE: get→mutate→set below is not atomic. v1 assumes a single popup driving
+// one operation at a time (the service worker serializes its message handling);
+// revisit if any other writer (alarms, sync) is ever added.
 export async function setActive(siteKey: string, profileId: string | null): Promise<void> {
   const map = await getActiveMap()
   map[siteKey] = profileId
