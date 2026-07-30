@@ -120,11 +120,12 @@ async function switchProfile({ tabId, siteKey, targetProfileId }: SwitchRequest)
   const target = targetProfileId ? profiles.find((p) => p.id === targetProfileId) : undefined
   if (targetProfileId && !target) return { ok: false, error: 'Profile not found' }
 
-  // 1. snapshot + 2. auto-save
+  // 1. snapshot + 2. auto-save (persisted immediately so a mid-wipe failure can't lose the outgoing session)
   const snap = await captureSession(tabId, siteKey)
   const warnings = [...snap.warnings]
   const active = await getActiveMap()
   autoSave(profiles, siteKey, active[siteKey], snap)
+  await saveProfiles(profiles)
 
   // 3. wipe
   await clearCookies(siteKey, warnings)
@@ -149,7 +150,6 @@ async function switchProfile({ tabId, siteKey, targetProfileId }: SwitchRequest)
   }
 
   // 5. bookkeeping + reload
-  await saveProfiles(profiles)
   await setActive(siteKey, target?.id ?? null)
   await chrome.tabs.reload(tabId)
   return { ok: true, warnings }
