@@ -49,6 +49,11 @@ test('parseImport rejects profiles missing web storage maps', () => {
   expect(() => parseImport(nullSs)).toThrow('invalid profile')
 })
 
+test('parseImport rejects profiles missing color or timestamps', () => {
+  const noColor = JSON.stringify({ app: 'session-manager', version: 1, profiles: [{ id: 'x', siteKey: 'a.com', name: 'A', cookies: [], localStorage: {}, sessionStorage: {}, createdAt: 1, updatedAt: 1 }] })
+  expect(() => parseImport(noColor)).toThrow('invalid profile')
+})
+
 test('mergeProfiles: imported entry wins on id collision, others appended', () => {
   const a = sample()
   const b = sample()

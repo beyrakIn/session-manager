@@ -1,6 +1,6 @@
 import { siteKeyFromUrl } from '../lib/site'
-import { getActiveMap, getProfiles, saveProfiles, setActive } from '../lib/store'
-import { mergeProfiles, parseImport, serializeExport } from '../lib/transfer'
+import { getActiveMap, getProfiles } from '../lib/store'
+import { serializeExport } from '../lib/transfer'
 import type { BgResponse, SessionProfile } from '../lib/types'
 
 const COLORS = ['#ef4444', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#6b7280']
@@ -111,10 +111,15 @@ async function deleteProfile(p: SessionProfile): Promise<void> {
   if (!confirm(`Delete profile "${p.name}"? The saved login will be lost.`)) return
   setBusy(true)
   try {
-    const profiles = await getProfiles()
-    await saveProfiles(profiles.filter((x) => x.id !== p.id))
-    const active = await getActiveMap()
-    if (active[siteKey] === p.id) await setActive(siteKey, null)
+    const res = (await chrome.runtime.sendMessage({
+      type: 'deleteProfile',
+      profileId: p.id,
+      siteKey,
+    })) as BgResponse | undefined
+    if (!res || !res.ok) {
+      showNotice(`Delete failed: ${res ? res.error : 'no response from service worker'}`)
+      return
+    }
     await renderList()
   } finally {
     setBusy(false)
@@ -149,12 +154,17 @@ function wireSessionEvents(): void {
     e.preventDefault()
     void (async () => {
       if (busy) return
+      const name = nameEl.value.trim()
+      if (!name) {
+        showNotice('Profile name cannot be empty.')
+        return
+      }
       setBusy(true)
       const res = (await chrome.runtime.sendMessage({
         type: 'saveNew',
         tabId,
         siteKey,
-        name: nameEl.value.trim(),
+        name,
         color: selectedColor,
         emoji: emojiEl.value.trim() || undefined,
       })) as BgResponse | undefined
@@ -162,6 +172,9 @@ function wireSessionEvents(): void {
         setBusy(false)
         showNotice(`Save failed: ${res ? res.error : 'no response from service worker'}`)
         return
+      }
+      if (res.warnings.length > 0) {
+        showNotice(`Saved with ${res.warnings.length} warning(s): ${res.warnings[0]}`)
       }
       formEl.reset()
       await renderList()
@@ -195,13 +208,17 @@ function wireTransferEvents(): void {
       if (!file) return
       setBusy(true)
       try {
-        const imported = parseImport(await file.text())
-        const merged = mergeProfiles(await getProfiles(), imported)
-        await saveProfiles(merged)
-        showNotice(`Imported ${imported.length} profile(s).`)
+        const json = await file.text()
+        const res = (await chrome.runtime.sendMessage({
+          type: 'importProfiles',
+          json,
+        })) as BgResponse | undefined
+        if (!res || !res.ok) {
+          showNotice(`Import failed: ${res ? res.error : 'no response from service worker'}`)
+          return
+        }
+        showNotice(`Imported ${res.imported ?? 0} profile(s).`)
         if (siteKey) await renderList()
-      } catch (e) {
-        showNotice(`Import failed: ${e instanceof Error ? e.message : String(e)}`)
       } finally {
         importFile.value = ''
         setBusy(false)

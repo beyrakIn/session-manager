@@ -43,6 +43,13 @@ real site (GitHub works well).
       "Auto-saved …" profile
 - [ ] Profile list with 10+ profiles scrolls inside the popup; save form and
       buttons stay visible
+- [ ] Popup on the Chrome Web Store or a PDF tab → switching aborts with a clear
+      error and NO cookies are wiped (site may show as google.com — that's why
+      the abort matters)
+- [ ] Save a profile that includes a short-lived cookie; let it expire; switch
+      to that profile → warning says the expired cookie was skipped
+- [ ] On a site whose login lives in localStorage (SPA token auth), save/switch
+      round-trips the login correctly
 
 ## Regression basics
 - [ ] `npm test` passes

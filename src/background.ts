@@ -1,12 +1,21 @@
 import { cookieUrl, toSetParams, type CapturedCookie } from './lib/cookies'
-import { autoSaveName, newProfile } from './lib/profiles'
+import { applyAutoSave, newProfile, type SessionSnapshot } from './lib/profiles'
 import { getActiveMap, getProfiles, saveProfiles, setActive } from './lib/store'
+import { mergeProfiles, parseImport } from './lib/transfer'
 import {
   clearStoragesInPage,
   readStoragesInPage,
   writeStoragesInPage,
 } from './lib/webstorage'
-import type { BgRequest, BgResponse, SaveNewRequest, SessionProfile, SwitchRequest } from './lib/types'
+import type {
+  BgRequest,
+  BgResponse,
+  DeleteProfileRequest,
+  ImportProfilesRequest,
+  SaveNewRequest,
+  SessionProfile,
+  SwitchRequest,
+} from './lib/types'
 
 const AUTO_SAVE_COLOR = '#9ca3af'
 
@@ -29,15 +38,16 @@ async function handle(msg: BgRequest): Promise<BgResponse> {
       return switchProfile(msg)
     case 'saveNew':
       return saveNew(msg)
+    case 'deleteProfile':
+      return deleteProfileOp(msg)
+    case 'importProfiles':
+      return importProfilesOp(msg)
     default:
       return { ok: false, error: 'Unknown message type' }
   }
 }
 
-interface Snapshot {
-  cookies: CapturedCookie[]
-  localStorage: Record<string, string>
-  sessionStorage: Record<string, string>
+interface Snapshot extends SessionSnapshot {
   warnings: string[]
 }
 
@@ -46,16 +56,21 @@ async function captureSession(tabId: number, siteKey: string): Promise<Snapshot>
   const cookies = (await chrome.cookies.getAll({ domain: siteKey })) as CapturedCookie[]
   let localStorage: Record<string, string> = {}
   let sessionStorage: Record<string, string> = {}
+  let storageRead = false
   try {
     const [r] = await chrome.scripting.executeScript({
       target: { tabId },
       func: readStoragesInPage,
     })
-    if (r?.result) ({ localStorage, sessionStorage } = r.result)
+    if (r?.result) {
+      ;({ localStorage, sessionStorage } = r.result)
+      storageRead = true
+    }
   } catch {
-    warnings.push('Could not read page storage — captured cookies only')
+    /* fall through — storageRead stays false */
   }
-  return { cookies, localStorage, sessionStorage, warnings }
+  if (!storageRead) warnings.push('Could not read page storage — captured cookies only')
+  return { cookies, localStorage, sessionStorage, storageRead, warnings }
 }
 
 async function clearCookies(siteKey: string, warnings: string[]): Promise<void> {
@@ -90,37 +105,6 @@ async function restoreCookies(profile: SessionProfile, warnings: string[]): Prom
   }
 }
 
-/** Auto-save current state into the active profile, or a new auto-named one. */
-function autoSave(
-  profiles: SessionProfile[],
-  siteKey: string,
-  activeId: string | null | undefined,
-  snap: Snapshot
-): void {
-  const existing = activeId ? profiles.find((p) => p.id === activeId) : undefined
-  if (existing) {
-    existing.cookies = snap.cookies
-    existing.localStorage = snap.localStorage
-    existing.sessionStorage = snap.sessionStorage
-    existing.updatedAt = Date.now()
-  } else if (
-    snap.cookies.length > 0 ||
-    Object.keys(snap.localStorage).length > 0 ||
-    Object.keys(snap.sessionStorage).length > 0
-  ) {
-    profiles.push(
-      newProfile({
-        siteKey,
-        name: autoSaveName(new Date()),
-        color: AUTO_SAVE_COLOR,
-        cookies: snap.cookies,
-        localStorage: snap.localStorage,
-        sessionStorage: snap.sessionStorage,
-      })
-    )
-  }
-}
-
 async function switchProfile({ tabId, siteKey, targetProfileId }: SwitchRequest): Promise<BgResponse> {
   // REVIEW-MANDATED: chrome.cookies.getAll({domain: ''}) matches every cookie
   // in the browser, so a falsy siteKey would make clearCookies wipe all sites.
@@ -130,11 +114,25 @@ async function switchProfile({ tabId, siteKey, targetProfileId }: SwitchRequest)
   const target = targetProfileId ? profiles.find((p) => p.id === targetProfileId) : undefined
   if (targetProfileId && !target) return { ok: false, error: 'Profile not found' }
 
-  // 1. snapshot + 2. auto-save (persisted immediately so a mid-wipe failure can't lose the outgoing session)
+  // 1. snapshot
   const snap = await captureSession(tabId, siteKey)
+
+  // REVIEW-MANDATED: if the page's storage can't be read (e.g. the Chrome Web
+  // Store or a PDF viewer tab — both https pages that resolve to a real
+  // siteKey, e.g. chromewebstore.google.com → google.com), abort before any
+  // mutation. Continuing would wipe google.com's cookies on a page we can
+  // never restore into — exactly the half-switch this guard forbids.
+  if (!snap.storageRead) {
+    return {
+      ok: false,
+      error: "Can't access this page's storage — switch aborted. Focus/reload the site tab and try again.",
+    }
+  }
+
+  // 2. auto-save (persisted immediately so a mid-wipe failure can't lose the outgoing session)
   const warnings = [...snap.warnings]
   const active = await getActiveMap()
-  autoSave(profiles, siteKey, active[siteKey], snap)
+  applyAutoSave(profiles, siteKey, active[siteKey], snap, AUTO_SAVE_COLOR, new Date())
   await saveProfiles(profiles)
 
   // 3. wipe
@@ -166,7 +164,13 @@ async function switchProfile({ tabId, siteKey, targetProfileId }: SwitchRequest)
 
   // 5. bookkeeping + reload
   await setActive(siteKey, target?.id ?? null)
-  await chrome.tabs.reload(tabId)
+  try {
+    await chrome.tabs.reload(tabId)
+  } catch {
+    // REVIEW-MANDATED: a tab closed mid-switch must not turn a completed
+    // switch into a reported failure — the switch itself already succeeded.
+    warnings.push('Could not reload the tab — reload it manually')
+  }
   return { ok: true, warnings }
 }
 
@@ -188,4 +192,21 @@ async function saveNew({ tabId, siteKey, name, color, emoji }: SaveNewRequest): 
   await saveProfiles(profiles)
   await setActive(siteKey, p.id)
   return { ok: true, warnings: snap.warnings }
+}
+
+async function deleteProfileOp({ profileId, siteKey }: DeleteProfileRequest): Promise<BgResponse> {
+  const profiles = await getProfiles()
+  await saveProfiles(profiles.filter((p) => p.id !== profileId))
+  if (siteKey) {
+    const active = await getActiveMap()
+    if (active[siteKey] === profileId) await setActive(siteKey, null)
+  }
+  return { ok: true, warnings: [] }
+}
+
+async function importProfilesOp({ json }: ImportProfilesRequest): Promise<BgResponse> {
+  const imported = parseImport(json) // throws → listener error path replies {ok:false}
+  const merged = mergeProfiles(await getProfiles(), imported)
+  await saveProfiles(merged)
+  return { ok: true, warnings: [], imported: imported.length }
 }

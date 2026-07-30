@@ -30,8 +30,24 @@ export interface SaveNewRequest {
   emoji?: string
 }
 
-export type BgRequest = SwitchRequest | SaveNewRequest
+export interface DeleteProfileRequest {
+  type: 'deleteProfile'
+  profileId: string
+  /** '' when no manageable site is focused (delete still works) */
+  siteKey: string
+}
+
+export interface ImportProfilesRequest {
+  type: 'importProfiles'
+  json: string
+}
+
+export type BgRequest =
+  | SwitchRequest
+  | SaveNewRequest
+  | DeleteProfileRequest
+  | ImportProfilesRequest
 
 export type BgResponse =
-  | { ok: true; warnings: string[] }
+  | { ok: true; warnings: string[]; imported?: number }
   | { ok: false; error: string }

@@ -20,3 +20,53 @@ export function newProfile(init: {
   const now = Date.now()
   return { ...init, id: crypto.randomUUID(), createdAt: now, updatedAt: now }
 }
+
+export interface SessionSnapshot {
+  cookies: CapturedCookie[]
+  localStorage: Record<string, string>
+  sessionStorage: Record<string, string>
+  /** false when the page-storage read failed — storages are then unreliable */
+  storageRead: boolean
+}
+
+/**
+ * Fold a snapshot into the profile list before a switch: update the active
+ * profile, or create an auto-named one if the snapshot holds anything.
+ * When storageRead is false the existing profile's storages are preserved —
+ * a failed read must never replace saved SPA tokens with {}.
+ */
+export function applyAutoSave(
+  profiles: SessionProfile[],
+  siteKey: string,
+  activeId: string | null | undefined,
+  snap: SessionSnapshot,
+  autoSaveColor: string,
+  now: Date
+): void {
+  const existing = activeId ? profiles.find((p) => p.id === activeId) : undefined
+  if (existing) {
+    existing.cookies = snap.cookies
+    if (snap.storageRead) {
+      existing.localStorage = snap.localStorage
+      existing.sessionStorage = snap.sessionStorage
+    }
+    existing.updatedAt = now.getTime()
+    return
+  }
+  const hasContent =
+    snap.cookies.length > 0 ||
+    Object.keys(snap.localStorage).length > 0 ||
+    Object.keys(snap.sessionStorage).length > 0
+  if (hasContent) {
+    profiles.push(
+      newProfile({
+        siteKey,
+        name: autoSaveName(now),
+        color: autoSaveColor,
+        cookies: snap.cookies,
+        localStorage: snap.localStorage,
+        sessionStorage: snap.sessionStorage,
+      })
+    )
+  }
+}

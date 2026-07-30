@@ -35,7 +35,10 @@ export function parseImport(json: string): SessionProfile[] {
       typeof p?.name !== 'string' ||
       !Array.isArray(p?.cookies) ||
       typeof p?.localStorage !== 'object' || p.localStorage === null ||
-      typeof p?.sessionStorage !== 'object' || p.sessionStorage === null
+      typeof p?.sessionStorage !== 'object' || p.sessionStorage === null ||
+      typeof p?.color !== 'string' ||
+      typeof p?.createdAt !== 'number' ||
+      typeof p?.updatedAt !== 'number'
     ) {
       throw new Error('Export file contains an invalid profile')
     }

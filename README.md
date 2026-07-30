@@ -33,7 +33,13 @@ select `dist/`.
 - Sessions cannot run simultaneously in different tabs — switching is
   one-at-a-time per site.
 - Profiles are stored unencrypted in `chrome.storage.local`.
-- Partitioned (CHIPS) third-party cookies are not captured.
+- Partitioned (CHIPS) third-party cookies are not captured or cleared.
+- Web storage (localStorage/sessionStorage) is captured from the specific
+  subdomain in the focused tab; cookies span the whole site but web storage
+  does not. Multi-subdomain SPAs may need a re-login on other subdomains
+  after switching.
 - If the extension's service worker is killed mid-switch, the site may end up
   logged out with no active profile marked — your outgoing session is still
-  safe in its (auto-saved) profile; just switch to it again.
+  safe in its (auto-saved) profile; just switch to it again. Switches now
+  abort up front (no cookies wiped) if the page's storage can't be read at
+  all, e.g. the Chrome Web Store or a PDF viewer tab.
