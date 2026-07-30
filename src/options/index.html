@@ -1,27 +1,82 @@
 <!doctype html>
-<html>
+<html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>Session Manager — all sessions</title>
+    <title>Session Manager</title>
     <link rel="stylesheet" href="./options.css" />
   </head>
   <body>
-    <main>
-      <header class="page-head">
-        <div>
-          <h1>All sessions</h1>
-          <p id="totals" class="totals">Loading…</p>
+    <div class="app">
+      <aside class="sidebar">
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true"></span>
+          <span class="brand-name">Session Manager</span>
         </div>
-        <input id="search" type="search" placeholder="Search sites and profiles" autocomplete="off" />
-      </header>
 
-      <div id="notice" hidden></div>
+        <nav id="site-nav" aria-label="Sites"></nav>
 
-      <section id="groups"></section>
-    </main>
+        <div class="sidebar-foot">
+          <div class="meter-label">
+            <span>Storage used</span>
+            <strong id="storage-used">—</strong>
+          </div>
+          <div class="meter" role="presentation"><span id="storage-bar"></span></div>
+        </div>
+      </aside>
 
-    <div id="selection-bar" hidden>
-      <span id="selection-count"></span>
+      <main class="content">
+        <header class="toolbar">
+          <div class="search-wrap">
+            <svg class="search-icon" viewBox="0 0 20 20" aria-hidden="true">
+              <circle cx="9" cy="9" r="5.5" />
+              <path d="M13 13l4 4" />
+            </svg>
+            <input
+              id="search"
+              type="search"
+              placeholder="Search profiles and sites"
+              aria-label="Search profiles and sites"
+              autocomplete="off"
+            />
+            <kbd class="hint-key">/</kbd>
+          </div>
+
+          <div class="segmented" role="group" aria-label="Filter by kind">
+            <button type="button" data-kind="all" class="on">All</button>
+            <button type="button" data-kind="named">Named</button>
+            <button type="button" data-kind="auto">Auto-saved</button>
+          </div>
+        </header>
+
+        <div id="notice" role="status" hidden></div>
+
+        <div class="table-wrap">
+          <table id="grid">
+            <thead>
+              <tr>
+                <th class="col-check">
+                  <input id="check-all" type="checkbox" aria-label="Select all shown profiles" />
+                </th>
+                <th class="col-name"><button type="button" data-sort="name">Profile</button></th>
+                <th class="col-site"><button type="button" data-sort="site">Site</button></th>
+                <th class="col-num"><button type="button" data-sort="cookies">Cookies</button></th>
+                <th class="col-num"><button type="button" data-sort="keys">Storage</button></th>
+                <th class="col-num"><button type="button" data-sort="size">Size</button></th>
+                <th class="col-num"><button type="button" data-sort="updated">Updated</button></th>
+                <th class="col-actions"><span class="sr-only">Actions</span></th>
+              </tr>
+            </thead>
+            <tbody id="rows"></tbody>
+          </table>
+
+          <div id="empty" class="empty" hidden></div>
+        </div>
+      </main>
+    </div>
+
+    <div id="selection-bar" role="status" hidden>
+      <strong id="selection-count"></strong>
+      <span class="sep" aria-hidden="true"></span>
       <button id="clear-selection" type="button">Clear</button>
       <button id="delete-selected" type="button" class="danger">Delete</button>
     </div>
