@@ -45,3 +45,17 @@ export function hostFromSiteKey(siteKey: string): string {
 export function registrableDomain(host: string): string {
   return getDomain(host, { allowPrivateDomains: true }) ?? host
 }
+
+/**
+ * A URL that opens a site key in a tab. The port is part of the key and must
+ * be preserved — dropping it would open the wrong dev server.
+ *
+ * The scheme isn't stored, so it is inferred: hosts with no registrable domain
+ * (localhost, IP literals, single-label intranet names) are overwhelmingly
+ * plain http; everything else https.
+ */
+export function siteUrlFromKey(siteKey: string): string {
+  const host = hostFromSiteKey(siteKey)
+  const scheme = getDomain(host, { allowPrivateDomains: true }) ? 'https' : 'http'
+  return `${scheme}://${siteKey}/`
+}

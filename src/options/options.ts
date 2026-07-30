@@ -1,5 +1,5 @@
 import { formatBytes, groupProfilesBySite, matchesQuery, profileStats } from '../lib/dashboard'
-import { hostFromSiteKey } from '../lib/site'
+import { siteUrlFromKey } from '../lib/site'
 import { getActiveMap, getProfiles } from '../lib/store'
 import type { BgResponse, SessionProfile } from '../lib/types'
 
@@ -136,7 +136,7 @@ function renderSite(
 
   const open = document.createElement('a')
   open.className = 'site-open'
-  open.href = `https://${hostFromSiteKey(siteKey)}/`
+  open.href = siteUrlFromKey(siteKey)
   open.target = '_blank'
   open.rel = 'noreferrer'
   open.textContent = 'Open site'
@@ -314,7 +314,7 @@ async function switchInto(p: SessionProfile, siteKey: string): Promise<void> {
   setBusy(true)
   try {
     const tab = await chrome.tabs.create({
-      url: `https://${hostFromSiteKey(siteKey)}/`,
+      url: siteUrlFromKey(siteKey),
       active: true,
     })
     if (tab.id === undefined) {

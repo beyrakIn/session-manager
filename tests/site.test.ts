@@ -1,5 +1,25 @@
 import { expect, test } from 'vitest'
-import { hostFromSiteKey, registrableDomain, siteKeyFromUrl } from '../src/lib/site'
+import {
+  hostFromSiteKey,
+  registrableDomain,
+  siteKeyFromUrl,
+  siteUrlFromKey,
+} from '../src/lib/site'
+
+test('siteUrlFromKey keeps the port and picks a workable scheme', () => {
+  expect(siteUrlFromKey('jira.company.com')).toBe('https://jira.company.com/')
+  expect(siteUrlFromKey('app.example.com:8443')).toBe('https://app.example.com:8443/')
+  // hosts with no registrable domain are plain http in practice
+  expect(siteUrlFromKey('localhost:3000')).toBe('http://localhost:3000/')
+  expect(siteUrlFromKey('192.168.1.5:9000')).toBe('http://192.168.1.5:9000/')
+})
+
+test('siteKeyFromUrl and siteUrlFromKey round-trip', () => {
+  for (const url of ['https://jira.company.com/x', 'http://localhost:3000/app']) {
+    const key = siteKeyFromUrl(url)!
+    expect(siteKeyFromUrl(siteUrlFromKey(key))).toBe(key)
+  }
+})
 
 test('each subdomain is its own site key', () => {
   expect(siteKeyFromUrl('https://jira.company.com/browse/X')).toBe('jira.company.com')
