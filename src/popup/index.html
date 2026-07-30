@@ -3,9 +3,34 @@
   <head>
     <meta charset="utf-8" />
     <title>Session Manager</title>
+    <link rel="stylesheet" href="./popup.css" />
   </head>
   <body>
-    <p>Session Manager</p>
+    <header>
+      <strong id="site">…</strong>
+    </header>
+
+    <div id="notice" hidden></div>
+
+    <ul id="profiles"></ul>
+
+    <form id="save-form">
+      <input id="name" placeholder="Profile name" required maxlength="40" autocomplete="off" />
+      <div class="row">
+        <div id="colors"></div>
+        <input id="emoji" placeholder="🙂" maxlength="4" title="Optional emoji label" />
+      </div>
+      <button type="submit">Save current session as profile</button>
+    </form>
+
+    <div class="row actions">
+      <button id="fresh" title="Switch to a logged-out session">Fresh session</button>
+      <button id="export">Export</button>
+      <button id="import-btn">Import</button>
+      <input type="file" id="import-file" accept="application/json" hidden />
+    </div>
+    <p class="hint">Exports contain login credentials — keep the file safe.</p>
+
     <script type="module" src="./popup.ts"></script>
   </body>
 </html>
