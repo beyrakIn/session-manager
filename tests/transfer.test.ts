@@ -1,5 +1,11 @@
 import { expect, test } from 'vitest'
-import { mergeProfiles, parseImport, serializeExport } from '../src/lib/transfer'
+import {
+  mergeProfiles,
+  parseEncryptedExport,
+  parseImport,
+  serializeEncryptedExport,
+  serializeExport,
+} from '../src/lib/transfer'
 import { newProfile } from '../src/lib/profiles'
 
 const sample = () =>
@@ -52,6 +58,39 @@ test('parseImport rejects profiles missing web storage maps', () => {
 test('parseImport rejects profiles missing color or timestamps', () => {
   const noColor = JSON.stringify({ app: 'session-manager', version: 1, profiles: [{ id: 'x', siteKey: 'a.com', name: 'A', cookies: [], localStorage: {}, sessionStorage: {}, createdAt: 1, updatedAt: 1 }] })
   expect(() => parseImport(noColor)).toThrow('invalid profile')
+})
+
+test('encrypted export envelope round-trips', () => {
+  const json = serializeEncryptedExport('c2FsdA==', 600000, { iv: 'aXY=', ct: 'Y3Q=' })
+  const parsed = parseEncryptedExport(json)
+  expect(parsed?.salt).toBe('c2FsdA==')
+  expect(parsed?.iterations).toBe(600000)
+  expect(parsed?.blob).toEqual({ iv: 'aXY=', ct: 'Y3Q=' })
+})
+
+test('parseEncryptedExport returns null for plain exports and junk', () => {
+  expect(parseEncryptedExport(serializeExport([]))).toBeNull()
+  expect(parseEncryptedExport('{oops')).toBeNull()
+  expect(parseEncryptedExport('{"app":"session-manager","version":2}')).toBeNull()
+})
+
+test('parseEncryptedExport rejects an out-of-band iteration count', () => {
+  const withIters = (n: unknown) =>
+    JSON.stringify({
+      app: 'session-manager',
+      version: 2,
+      encrypted: true,
+      salt: 'c2FsdA==',
+      iterations: n,
+      blob: { iv: 'aXY=', ct: 'Y3Q=' },
+    })
+  // an attacker-supplied count would otherwise pin a core inside deriveKey
+  expect(parseEncryptedExport(withIters(1e12))).toBeNull()
+  expect(parseEncryptedExport(withIters(0))).toBeNull()
+  expect(parseEncryptedExport(withIters(-1))).toBeNull()
+  expect(parseEncryptedExport(withIters(1.5))).toBeNull()
+  expect(parseEncryptedExport(withIters('600000'))).toBeNull()
+  expect(parseEncryptedExport(withIters(600000))).not.toBeNull()
 })
 
 test('mergeProfiles: imported entry wins on id collision, others appended', () => {

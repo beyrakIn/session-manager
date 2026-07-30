@@ -125,7 +125,15 @@ function renderColorSwatches(): void {
 }
 
 async function renderList(): Promise<void> {
-  const [profiles, active] = await Promise.all([getProfiles(), getActiveMap()])
+  let profiles, active
+  try {
+    ;[profiles, active] = await Promise.all([getProfiles(), getActiveMap()])
+  } catch {
+    // Auto-lock can fire between the unlock check and this read; restart so
+    // the gate takes over rather than dying on an uncaught LockedError.
+    window.location.reload()
+    return
+  }
   const activeId = active[siteKey] ?? null
   // Profiles saved before session keys became subdomain-aware are keyed by the
   // registrable domain; keep showing them here so they aren't stranded.

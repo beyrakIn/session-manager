@@ -27,9 +27,11 @@ import { hostFromSiteKey, registrableDomain, siteKeyFromUrl } from './lib/site'
 import {
   getActiveMap,
   getProfiles,
+  hasPlaintextProfiles,
   removePlaintextProfiles,
   saveProfiles,
   setActive,
+  writePlaintextProfiles,
 } from './lib/store'
 import {
   mergeProfiles,
@@ -47,6 +49,7 @@ import type {
   BgRequest,
   BgResponse,
   DeleteProfileRequest,
+  ChangePassphraseRequest,
   DeleteProfilesRequest,
   DisableProtectionRequest,
   EnableProtectionRequest,
@@ -73,8 +76,9 @@ chrome.runtime.onMessage.addListener((msg: BgRequest, _sender, sendResponse) => 
   run.then(
     (res) => {
       // Any successful use of an unlocked vault pushes the idle timer out, so
-      // active work never locks under you.
-      if (res.ok && msg.type !== 'lock') void touchAutoLock()
+      // active work never locks under you. Read-only state queries are
+      // excluded: a future poller must not be able to hold the lock open.
+      if (res.ok && msg.type !== 'lock' && msg.type !== 'lockState') void touchAutoLock()
       sendResponse(res)
     },
     (e) => {
@@ -122,6 +126,8 @@ async function handle(msg: BgRequest): Promise<BgResponse> {
       return setLockTimeoutOp(msg)
     case 'exportAll':
       return exportAllOp()
+    case 'changePassphrase':
+      return changePassphraseOp(msg)
     default:
       return { ok: false, error: 'Unknown message type' }
   }
@@ -414,6 +420,22 @@ async function updateProfileDataOp({
 
 const LOCK_ALARM = 'auto-lock'
 
+/**
+ * A vault and a readable `profiles` key must never coexist: that state means
+ * an earlier enable committed the vault but died before deleting the
+ * plaintext, leaving every session readable on disk while the UI claims they
+ * are encrypted. Idempotent, so it is safe to run at every worker start.
+ */
+async function reconcileVault(): Promise<void> {
+  if ((await isProtected()) && (await hasPlaintextProfiles())) {
+    await removePlaintextProfiles()
+  }
+}
+
+void reconcileVault()
+chrome.runtime.onStartup.addListener(() => void reconcileVault())
+chrome.runtime.onInstalled.addListener(() => void reconcileVault())
+
 async function lockState(): Promise<LockState> {
   const { timeoutMinutes } = await getLockSettings()
   return { protected: await isProtected(), locked: await isLocked(), timeoutMinutes }
@@ -465,8 +487,45 @@ async function enableProtectionOp({ passphrase }: EnableProtectionRequest): Prom
     iterations: KDF_ITERATIONS,
     blob: await encryptJson(key, profiles),
   })
-  // Only drop the readable copy once the encrypted one is committed.
+  // Only drop the readable copy once the encrypted one is committed — and
+  // confirm it actually went, rather than reporting success over a vault that
+  // still has a plaintext twin sitting next to it.
   await removePlaintextProfiles()
+  if (await hasPlaintextProfiles()) {
+    return {
+      ok: false,
+      error: 'Encrypted, but the readable copy could not be removed — reopen Security and retry',
+    }
+  }
+  await setSessionKey(key)
+  await armAutoLock()
+  return { ok: true, warnings: [], lock: await lockState() }
+}
+
+async function changePassphraseOp({
+  current,
+  next,
+}: ChangePassphraseRequest): Promise<BgResponse> {
+  const vault = await getVault()
+  if (!vault) return { ok: false, error: 'Protection is not enabled' }
+  if (next.length < 8) return { ok: false, error: 'Use a password of at least 8 characters' }
+
+  const oldKey = await deriveKey(current, vault.salt, vault.iterations)
+  let profiles: SessionProfile[]
+  try {
+    profiles = await decryptJson<SessionProfile[]>(oldKey, vault.blob)
+  } catch {
+    return { ok: false, error: 'Wrong current password' }
+  }
+  // Re-encrypt in place: the plaintext never touches chrome.storage.local.
+  const salt = newSalt()
+  const key = await deriveKey(next, salt, KDF_ITERATIONS)
+  await setVault({
+    v: 1,
+    salt,
+    iterations: KDF_ITERATIONS,
+    blob: await encryptJson(key, profiles),
+  })
   await setSessionKey(key)
   await armAutoLock()
   return { ok: true, warnings: [], lock: await lockState() }
@@ -484,7 +543,7 @@ async function disableProtectionOp({ passphrase }: DisableProtectionRequest): Pr
   }
   // Write the plaintext copy before removing the vault, so a failure here
   // can't leave the profiles in neither place.
-  await chrome.storage.local.set({ profiles })
+  await writePlaintextProfiles(profiles)
   await setVault(null)
   await clearSessionKey()
   await chrome.alarms.clear(LOCK_ALARM)
@@ -547,7 +606,9 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
 // Save/delete/import/auto-save all land in the 'profiles' storage key —
 // refresh the badge on every active tab (one per window) when it changes.
 chrome.storage.onChanged.addListener((changes, area) => {
-  if (area !== 'local' || !changes['profiles']) return
+  // With protection on, saves land in `vault`, not `profiles` — watch both or
+  // the badge goes stale for every protected user.
+  if (area !== 'local' || !(changes['profiles'] || changes['vault'])) return
   chrome.tabs
     .query({ active: true })
     .then((tabs) => {

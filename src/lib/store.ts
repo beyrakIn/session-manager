@@ -37,6 +37,16 @@ export async function removePlaintextProfiles(): Promise<void> {
   await chrome.storage.local.remove(PROFILES_KEY)
 }
 
+/** Writes the plaintext copy — used when protection is switched off. */
+export async function writePlaintextProfiles(profiles: SessionProfile[]): Promise<void> {
+  await chrome.storage.local.set({ [PROFILES_KEY]: profiles })
+}
+
+export async function hasPlaintextProfiles(): Promise<boolean> {
+  const r = await chrome.storage.local.get(PROFILES_KEY)
+  return r[PROFILES_KEY] !== undefined
+}
+
 // The active-profile map holds no credentials (site key → profile id), so it
 // stays readable while locked; the toolbar badge and popup need it to explain
 // what is locked rather than showing an empty extension.

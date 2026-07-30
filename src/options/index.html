@@ -145,6 +145,16 @@
             <button type="submit" class="btn">Save</button>
           </form>
 
+          <div class="section-head"><h3>Change password</h3></div>
+          <p class="prose">Re-encrypts in place; sessions are never written out unencrypted.</p>
+          <form id="change-form">
+            <input id="cur-pass" type="password" placeholder="Current password"
+              autocomplete="current-password" required />
+            <input id="new-pass" type="password" placeholder="New password (min 8)"
+              autocomplete="new-password" minlength="8" required />
+            <button type="submit" class="btn">Change</button>
+          </form>
+
           <div class="section-head"><h3>Turn protection off</h3></div>
           <p class="prose">Decrypts every session back to plain storage.</p>
           <form id="disable-form">

@@ -1008,6 +1008,25 @@ $<HTMLFormElement>('enable-form').addEventListener('submit', (e) => {
   })()
 })
 
+$<HTMLFormElement>('change-form').addEventListener('submit', (e) => {
+  e.preventDefault()
+  void (async () => {
+    const cur = $<HTMLInputElement>('cur-pass')
+    const next = $<HTMLInputElement>('new-pass')
+    const res = await send({
+      type: 'changePassphrase',
+      current: cur.value,
+      next: next.value,
+    })
+    securityStatus.textContent = res.ok ? 'Password changed.' : res.error
+    if (res.ok) {
+      cur.value = ''
+      next.value = ''
+      await refreshLockState()
+    }
+  })()
+})
+
 $<HTMLFormElement>('disable-form').addEventListener('submit', (e) => {
   e.preventDefault()
   void (async () => {
@@ -1099,7 +1118,9 @@ $('clear-selection').addEventListener('click', () => {
 $('delete-selected').addEventListener('click', () => void deleteProfiles([...selected]))
 
 chrome.storage.onChanged.addListener((changes, area) => {
-  if (area === 'local' && (changes['profiles'] || changes['activeProfile']) && !busy) {
+  // `vault` is where saves land once protection is on.
+  const relevant = changes['profiles'] || changes['vault'] || changes['activeProfile']
+  if (area === 'local' && relevant && !busy) {
     void load()
   }
 })

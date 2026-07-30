@@ -33,6 +33,13 @@ export function serializeEncryptedExport(
   return JSON.stringify(file, null, 2)
 }
 
+/**
+ * Bounds on an imported file's KDF cost. The count comes from the file, so an
+ * absurd value would pin a core for minutes inside crypto.subtle.deriveKey.
+ */
+export const MIN_KDF_ITERATIONS = 1
+export const MAX_KDF_ITERATIONS = 2_000_000
+
 /** The envelope of an encrypted export, or null if this isn't one. */
 export function parseEncryptedExport(json: string): EncryptedExportFile | null {
   let data: unknown
@@ -49,6 +56,9 @@ export function parseEncryptedExport(json: string): EncryptedExportFile | null {
     f.version !== 2 ||
     typeof f.salt !== 'string' ||
     typeof f.iterations !== 'number' ||
+    !Number.isInteger(f.iterations) ||
+    f.iterations < MIN_KDF_ITERATIONS ||
+    f.iterations > MAX_KDF_ITERATIONS ||
     typeof f.blob?.iv !== 'string' ||
     typeof f.blob?.ct !== 'string'
   ) {

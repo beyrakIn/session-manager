@@ -90,6 +90,12 @@ export interface DisableProtectionRequest {
   passphrase: string
 }
 
+export interface ChangePassphraseRequest {
+  type: 'changePassphrase'
+  current: string
+  next: string
+}
+
 export interface SetLockTimeoutRequest {
   type: 'setLockTimeout'
   minutes: number
@@ -120,6 +126,7 @@ export type BgRequest =
   | SetLockTimeoutRequest
   | LockStateRequest
   | ExportAllRequest
+  | ChangePassphraseRequest
 
 export type BgResponse =
   | { ok: true; warnings: string[]; imported?: number; lock?: LockState; json?: string }
