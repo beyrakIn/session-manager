@@ -17,9 +17,9 @@ let queue: Promise<unknown> = Promise.resolve()
 chrome.runtime.onMessage.addListener((msg: BgRequest, _sender, sendResponse) => {
   const run = queue.then(() => handle(msg))
   queue = run.catch(() => undefined) // keep the queue alive after failures
-  run
-    .then(sendResponse)
-    .catch((e) => sendResponse({ ok: false, error: String(e instanceof Error ? e.message : e) }))
+  run.then(sendResponse, (e) =>
+    sendResponse({ ok: false, error: String(e instanceof Error ? e.message : e) })
+  )
   return true // keep the channel open for the async response
 })
 
@@ -29,6 +29,8 @@ async function handle(msg: BgRequest): Promise<BgResponse> {
       return switchProfile(msg)
     case 'saveNew':
       return saveNew(msg)
+    default:
+      return { ok: false, error: 'Unknown message type' }
   }
 }
 
@@ -101,7 +103,11 @@ function autoSave(
     existing.localStorage = snap.localStorage
     existing.sessionStorage = snap.sessionStorage
     existing.updatedAt = Date.now()
-  } else if (snap.cookies.length > 0 || Object.keys(snap.localStorage).length > 0) {
+  } else if (
+    snap.cookies.length > 0 ||
+    Object.keys(snap.localStorage).length > 0 ||
+    Object.keys(snap.sessionStorage).length > 0
+  ) {
     profiles.push(
       newProfile({
         siteKey,
@@ -116,6 +122,10 @@ function autoSave(
 }
 
 async function switchProfile({ tabId, siteKey, targetProfileId }: SwitchRequest): Promise<BgResponse> {
+  // REVIEW-MANDATED: chrome.cookies.getAll({domain: ''}) matches every cookie
+  // in the browser, so a falsy siteKey would make clearCookies wipe all sites.
+  if (!siteKey) return { ok: false, error: 'Invalid site' }
+
   const profiles = await getProfiles()
   const target = targetProfileId ? profiles.find((p) => p.id === targetProfileId) : undefined
   if (targetProfileId && !target) return { ok: false, error: 'Profile not found' }
@@ -134,6 +144,11 @@ async function switchProfile({ tabId, siteKey, targetProfileId }: SwitchRequest)
   } catch {
     warnings.push('Could not clear page storage')
   }
+
+  // REVIEW-MANDATED: if the worker dies during restore, the site reads as
+  // "no active profile" so a retry can't overwrite the outgoing profile's
+  // just-saved snapshot with a broken half-restored state.
+  await setActive(siteKey, null)
 
   // 4. restore
   if (target) {
@@ -156,6 +171,8 @@ async function switchProfile({ tabId, siteKey, targetProfileId }: SwitchRequest)
 }
 
 async function saveNew({ tabId, siteKey, name, color, emoji }: SaveNewRequest): Promise<BgResponse> {
+  if (!siteKey) return { ok: false, error: 'Invalid site' }
+
   const snap = await captureSession(tabId, siteKey)
   const profiles = await getProfiles()
   const p = newProfile({
