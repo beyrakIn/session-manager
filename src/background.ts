@@ -494,7 +494,8 @@ async function enableProtectionOp({ passphrase }: EnableProtectionRequest): Prom
   if (await hasPlaintextProfiles()) {
     return {
       ok: false,
-      error: 'Encrypted, but the readable copy could not be removed — reopen Security and retry',
+      error:
+        'Encrypted, but the readable copy could not be removed. It is cleaned up automatically — restart the browser if this keeps happening.',
     }
   }
   await setSessionKey(key)
@@ -526,7 +527,17 @@ async function changePassphraseOp({
     iterations: KDF_ITERATIONS,
     blob: await encryptJson(key, profiles),
   })
-  await setSessionKey(key)
+  try {
+    await setSessionKey(key)
+  } catch {
+    // The vault is already re-keyed; a stale cached key would make the next
+    // read fail with a raw crypto error. Fall back to a clean locked state.
+    await clearSessionKey()
+    return {
+      ok: false,
+      error: 'Password changed — unlock again with the new password',
+    }
+  }
   await armAutoLock()
   return { ok: true, warnings: [], lock: await lockState() }
 }
