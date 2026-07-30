@@ -69,6 +69,42 @@ test('applyAutoSave creates an auto-named profile when none is active and snapsh
   expect(profiles[0].name).toBe('Auto-saved 2026-07-30 09:05')
 })
 
+test('applyAutoSave never overwrites a profile saved under a different site key', () => {
+  // A legacy profile keyed by the registrable domain bundles cookies from every
+  // subdomain. Auto-saving a single subdomain's narrower snapshot over it would
+  // silently discard the rest, so it must fork a new profile instead.
+  const legacy = newProfile({
+    siteKey: 'company.com',
+    name: 'SSO',
+    color: '#000',
+    cookies: [],
+    localStorage: { everySubdomain: 'keep-me' },
+    sessionStorage: {},
+  })
+  const profiles = [legacy]
+  applyAutoSave(
+    profiles,
+    'jira.company.com',
+    legacy.id,
+    snap({ localStorage: { jiraOnly: '1' } }),
+    '#9ca3af',
+    new Date(2026, 6, 30, 9, 5)
+  )
+  expect(legacy.localStorage).toEqual({ everySubdomain: 'keep-me' })
+  expect(profiles).toHaveLength(2)
+  expect(profiles[1].siteKey).toBe('jira.company.com')
+  expect(profiles[1].localStorage).toEqual({ jiraOnly: '1' })
+})
+
+test('countProfilesForSite also counts legacy-keyed profiles', () => {
+  const make = (siteKey: string) =>
+    newProfile({ siteKey, name: 'X', color: '#000', cookies: [], localStorage: {}, sessionStorage: {} })
+  const profiles = [make('jira.company.com'), make('company.com'), make('wiki.company.com')]
+  expect(countProfilesForSite(profiles, 'jira.company.com', 'company.com')).toBe(2)
+  // no double counting when the site IS the registrable domain
+  expect(countProfilesForSite(profiles, 'company.com', 'company.com')).toBe(1)
+})
+
 test('applyAutoSave skips creation for an empty snapshot', () => {
   const profiles: ReturnType<typeof newProfile>[] = []
   applyAutoSave(profiles, 'a.com', null, snap({}), '#9ca3af', new Date())

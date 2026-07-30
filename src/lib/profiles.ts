@@ -21,8 +21,18 @@ export function newProfile(init: {
   return { ...init, id: crypto.randomUUID(), createdAt: now, updatedAt: now }
 }
 
-export function countProfilesForSite(profiles: SessionProfile[], siteKey: string): number {
-  return profiles.filter((p) => p.siteKey === siteKey).length
+/**
+ * How many profiles belong to a site. legacyKey lets callers also count
+ * profiles saved before session keys became origin-scoped (keyed by the
+ * registrable domain); pass the same value as siteKey to count only exact
+ * matches.
+ */
+export function countProfilesForSite(
+  profiles: SessionProfile[],
+  siteKey: string,
+  legacyKey: string = siteKey
+): number {
+  return profiles.filter((p) => p.siteKey === siteKey || p.siteKey === legacyKey).length
 }
 
 export interface SessionSnapshot {
@@ -47,7 +57,12 @@ export function applyAutoSave(
   autoSaveColor: string,
   now: Date
 ): void {
-  const existing = activeId ? profiles.find((p) => p.id === activeId) : undefined
+  const found = activeId ? profiles.find((p) => p.id === activeId) : undefined
+  // Only update in place when the profile belongs to this exact site. A legacy
+  // profile keyed by the registrable domain bundles cookies from every
+  // subdomain; overwriting it with one subdomain's narrower snapshot would
+  // silently discard the others. Fork a new profile for this site instead.
+  const existing = found && found.siteKey === siteKey ? found : undefined
   if (existing) {
     existing.cookies = snap.cookies
     if (snap.storageRead) {

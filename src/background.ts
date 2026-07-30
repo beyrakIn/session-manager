@@ -117,6 +117,13 @@ async function clearCookies(siteKey: string, warnings: string[]): Promise<void> 
       `${shared} cookie(s) are shared with other subdomains of ${registrableDomain(host)} — you may need to sign in again there`
     )
   }
+  // Cookies are not port-scoped at all, so a site key carrying a port shares
+  // its entire cookie jar with every other port on the same host.
+  if (siteKey !== host && cookies.length > 0) {
+    warnings.push(
+      `Cookies are shared with every port on ${host} — sessions on other ports were cleared too`
+    )
+  }
 }
 
 async function restoreCookies(profile: SessionProfile, warnings: string[]): Promise<void> {
@@ -253,7 +260,15 @@ void chrome.action.setBadgeTextColor({ color: '#ffffff' })
 
 async function updateBadge(tabId: number, url: string | undefined): Promise<void> {
   const key = url ? siteKeyFromUrl(url) : null
-  const n = key ? countProfilesForSite(await getProfiles(), key) : 0
+  // Count legacy (registrable-domain) profiles too, so the badge matches what
+  // the popup actually lists.
+  const n = key
+    ? countProfilesForSite(
+        await getProfiles(),
+        key,
+        registrableDomain(hostFromSiteKey(key))
+      )
+    : 0
   try {
     await chrome.action.setBadgeText({ tabId, text: n > 0 ? String(n) : '' })
   } catch {
