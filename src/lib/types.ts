@@ -56,6 +56,15 @@ export interface DeleteProfilesRequest {
   profileIds: string[]
 }
 
+/** Replaces a profile's captured session contents after hand-editing. */
+export interface UpdateProfileDataRequest {
+  type: 'updateProfileData'
+  profileId: string
+  cookies: CapturedCookie[]
+  localStorage: Record<string, string>
+  sessionStorage: Record<string, string>
+}
+
 export type BgRequest =
   | SwitchRequest
   | SaveNewRequest
@@ -63,6 +72,7 @@ export type BgRequest =
   | ImportProfilesRequest
   | UpdateProfileRequest
   | DeleteProfilesRequest
+  | UpdateProfileDataRequest
 
 export type BgResponse =
   | { ok: true; warnings: string[]; imported?: number }

@@ -81,6 +81,22 @@
       <button id="delete-selected" type="button" class="danger">Delete</button>
     </div>
 
+    <dialog id="drawer" aria-label="Session contents">
+      <header class="drawer-head">
+        <div>
+          <h2 id="drawer-title">Session contents</h2>
+          <p id="drawer-sub"></p>
+        </div>
+        <button id="drawer-close" type="button" class="btn btn-icon" aria-label="Close">✕</button>
+      </header>
+      <div id="drawer-body"></div>
+      <footer class="drawer-foot">
+        <span id="drawer-status"></span>
+        <button id="drawer-cancel" type="button" class="btn">Cancel</button>
+        <button id="drawer-save" type="button" class="btn btn-primary">Save changes</button>
+      </footer>
+    </dialog>
+
     <script type="module" src="./options.ts"></script>
   </body>
 </html>

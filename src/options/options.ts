@@ -1,4 +1,12 @@
+import type { CapturedCookie } from '../lib/cookies'
 import { formatBytes, matchesQuery, profileStats } from '../lib/dashboard'
+import {
+  cookieExpiry,
+  cookieFlags,
+  entriesToRecord,
+  recordToEntries,
+  type Entry,
+} from '../lib/inspect'
 import { siteUrlFromKey } from '../lib/site'
 import { getActiveMap, getProfiles } from '../lib/store'
 import type { BgResponse, SessionProfile } from '../lib/types'
@@ -400,12 +408,15 @@ function profileRow(p: SessionProfile): HTMLTableRowElement {
     renderRows()
   })
 
+  const dataBtn = iconButton('View and edit session data', 'btn btn-icon', dataIcon(), true)
+  dataBtn.addEventListener('click', () => openDrawer(p))
+
   const delBtn = iconButton('Delete', 'btn btn-icon btn-danger', trashIcon(), true)
   delBtn.addEventListener('click', () =>
     void withPending(delBtn, () => deleteProfiles([p.id], p.name))
   )
 
-  actions.append(switchBtn, editBtn, delBtn)
+  actions.append(switchBtn, dataBtn, editBtn, delBtn)
   tdActions.appendChild(actions)
 
   tr.append(tdCheck, tdName, tdSite, tdCookies, tdKeys, tdSize, tdUpdated, tdActions)
@@ -462,6 +473,7 @@ function svg(paths: string[]): SVGElement {
 const switchIcon = () => svg(['M3 7h11M11 4l3 3-3 3', 'M17 13H6M9 16l-3-3 3-3'])
 const pencilIcon = () => svg(['M4 16l1-4 8-8 3 3-8 8-4 1z'])
 const trashIcon = () => svg(['M4 6h12M8 6V4h4v2M6 6l1 10h6l1-10'])
+const dataIcon = () => svg(['M3 5h14M3 10h14M3 15h14', 'M7 3v14'])
 
 function editorRow(p: SessionProfile): HTMLTableRowElement {
   const tr = document.createElement('tr')
@@ -677,6 +689,223 @@ function waitForTabLoad(tabId: number): Promise<void> {
     chrome.tabs.onRemoved.addListener(onRemoved)
   })
 }
+
+/* --------------------------- data drawer -------------------------------- */
+
+const drawer = $<HTMLDialogElement>('drawer')
+const drawerBody = $('drawer-body')
+const drawerTitle = $('drawer-title')
+const drawerSub = $('drawer-sub')
+const drawerStatus = $('drawer-status')
+const drawerSave = $<HTMLButtonElement>('drawer-save')
+
+/** Working copy — edits only reach storage when Save is pressed. */
+let draft: {
+  id: string
+  cookies: CapturedCookie[]
+  local: Entry[]
+  session: Entry[]
+} | null = null
+
+function openDrawer(p: SessionProfile): void {
+  draft = {
+    id: p.id,
+    cookies: p.cookies.map((c) => ({ ...c })),
+    local: recordToEntries(p.localStorage),
+    session: recordToEntries(p.sessionStorage),
+  }
+  drawerTitle.textContent = `${p.emoji ? p.emoji + ' ' : ''}${p.name}`
+  drawerSub.textContent = p.siteKey
+  renderDrawer()
+  drawer.showModal()
+}
+
+function renderDrawer(): void {
+  if (!draft) return
+  drawerBody.replaceChildren()
+
+  drawerBody.append(
+    sectionHead(`Cookies`, draft.cookies.length, () => {
+      draft!.cookies.push({
+        name: '',
+        value: '',
+        domain: drawerSub.textContent ?? '',
+        path: '/',
+        secure: false,
+        httpOnly: false,
+        sameSite: 'unspecified',
+        hostOnly: true,
+        session: true,
+      })
+      renderDrawer()
+    })
+  )
+  if (draft.cookies.length === 0) drawerBody.append(sectionEmpty('No cookies in this profile.'))
+  draft.cookies.forEach((c, i) => drawerBody.append(cookieEntry(c, i)))
+
+  drawerBody.append(
+    sectionHead('localStorage', draft.local.length, () => {
+      draft!.local.push(['', ''])
+      renderDrawer()
+    })
+  )
+  if (draft.local.length === 0) drawerBody.append(sectionEmpty('Nothing stored.'))
+  draft.local.forEach((e, i) => drawerBody.append(storageEntry(e, i, 'local')))
+
+  drawerBody.append(
+    sectionHead('sessionStorage', draft.session.length, () => {
+      draft!.session.push(['', ''])
+      renderDrawer()
+    })
+  )
+  if (draft.session.length === 0) drawerBody.append(sectionEmpty('Nothing stored.'))
+  draft.session.forEach((e, i) => drawerBody.append(storageEntry(e, i, 'session')))
+
+  drawerStatus.textContent = `${draft.cookies.length} cookies · ${
+    draft.local.length + draft.session.length
+  } storage keys`
+}
+
+function sectionHead(title: string, count: number, onAdd: () => void): HTMLElement {
+  const head = document.createElement('div')
+  head.className = 'section-head'
+  const h = document.createElement('h3')
+  h.textContent = title
+  const c = document.createElement('span')
+  c.className = 'count'
+  c.textContent = String(count)
+  const add = document.createElement('button')
+  add.type = 'button'
+  add.className = 'btn'
+  add.textContent = 'Add'
+  add.addEventListener('click', onAdd)
+  head.append(h, c, add)
+  return head
+}
+
+function sectionEmpty(text: string): HTMLElement {
+  const d = document.createElement('div')
+  d.className = 'section-empty'
+  d.textContent = text
+  return d
+}
+
+function removeButton(onClick: () => void): HTMLButtonElement {
+  const b = document.createElement('button')
+  b.type = 'button'
+  b.className = 'btn btn-icon btn-danger'
+  b.title = 'Remove'
+  b.setAttribute('aria-label', 'Remove')
+  b.textContent = '✕'
+  b.addEventListener('click', onClick)
+  return b
+}
+
+function cookieEntry(c: CapturedCookie, index: number): HTMLElement {
+  const row = document.createElement('div')
+  row.className = 'entry'
+
+  const name = document.createElement('input')
+  name.type = 'text'
+  name.value = c.name
+  name.setAttribute('aria-label', 'Cookie name')
+  name.addEventListener('input', () => {
+    c.name = name.value
+  })
+
+  const value = document.createElement('textarea')
+  value.rows = 1
+  value.value = c.value
+  value.setAttribute('aria-label', `Value of ${c.name || 'cookie'}`)
+  value.addEventListener('input', () => {
+    c.value = value.value
+  })
+
+  const meta = document.createElement('div')
+  meta.className = 'meta'
+  for (const text of [c.domain + c.path, ...cookieFlags(c)]) {
+    const chip = document.createElement('span')
+    chip.className = 'chip'
+    chip.textContent = text
+    meta.appendChild(chip)
+  }
+  const expiry = cookieExpiry(c)
+  const exp = document.createElement('span')
+  exp.className = expiry === 'Expired' ? 'chip chip-warn' : 'chip'
+  exp.textContent = expiry
+  meta.appendChild(exp)
+
+  row.append(
+    name,
+    value,
+    removeButton(() => {
+      draft!.cookies.splice(index, 1)
+      renderDrawer()
+    }),
+    meta
+  )
+  return row
+}
+
+function storageEntry(entry: Entry, index: number, which: 'local' | 'session'): HTMLElement {
+  const row = document.createElement('div')
+  row.className = 'entry'
+
+  const key = document.createElement('input')
+  key.type = 'text'
+  key.value = entry[0]
+  key.placeholder = 'key'
+  key.setAttribute('aria-label', 'Storage key')
+  key.addEventListener('input', () => {
+    entry[0] = key.value
+  })
+
+  const value = document.createElement('textarea')
+  value.rows = 1
+  value.value = entry[1]
+  value.placeholder = 'value'
+  value.setAttribute('aria-label', `Value of ${entry[0] || 'entry'}`)
+  value.addEventListener('input', () => {
+    entry[1] = value.value
+  })
+
+  row.append(
+    key,
+    value,
+    removeButton(() => {
+      draft![which].splice(index, 1)
+      renderDrawer()
+    })
+  )
+  return row
+}
+
+async function saveDrawer(): Promise<void> {
+  if (!draft) return
+  const res = await send({
+    type: 'updateProfileData',
+    profileId: draft.id,
+    cookies: draft.cookies,
+    localStorage: entriesToRecord(draft.local),
+    sessionStorage: entriesToRecord(draft.session),
+  })
+  if (!res.ok) {
+    drawerStatus.textContent = res.error
+    return
+  }
+  const id = draft.id
+  draft = null
+  drawer.close()
+  await load()
+  flashRow(id)
+}
+
+drawer.addEventListener('close', () => {
+  draft = null
+})
+$('drawer-close').addEventListener('click', () => drawer.close())
+$('drawer-cancel').addEventListener('click', () => drawer.close())
+drawerSave.addEventListener('click', () => void withPending(drawerSave, saveDrawer))
 
 /* ------------------------------- events --------------------------------- */
 

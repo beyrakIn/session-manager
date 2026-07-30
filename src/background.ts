@@ -27,6 +27,7 @@ import type {
   SaveNewRequest,
   SessionProfile,
   SwitchRequest,
+  UpdateProfileDataRequest,
   UpdateProfileRequest,
 } from './lib/types'
 
@@ -59,6 +60,8 @@ async function handle(msg: BgRequest): Promise<BgResponse> {
       return updateProfileOp(msg)
     case 'deleteProfiles':
       return deleteProfilesOp(msg)
+    case 'updateProfileData':
+      return updateProfileDataOp(msg)
     default:
       return { ok: false, error: 'Unknown message type' }
   }
@@ -285,6 +288,35 @@ async function deleteProfilesOp({ profileIds }: DeleteProfilesRequest): Promise<
   for (const [siteKey, id] of Object.entries(active)) {
     if (id && doomed.has(id)) await setActive(siteKey, null)
   }
+  return { ok: true, warnings: [] }
+}
+
+async function updateProfileDataOp({
+  profileId,
+  cookies,
+  localStorage,
+  sessionStorage,
+}: UpdateProfileDataRequest): Promise<BgResponse> {
+  if (!Array.isArray(cookies)) return { ok: false, error: 'Invalid cookie data' }
+  // Hand-edited data reaches chrome.cookies.set on the next switch, where a
+  // malformed entry would fail that cookie. Reject the obviously broken ones
+  // here so the profile can't be saved into that state at all.
+  for (const c of cookies) {
+    if (typeof c?.name !== 'string' || typeof c?.value !== 'string') {
+      return { ok: false, error: 'Every cookie needs a name and a value' }
+    }
+    if (typeof c?.domain !== 'string' || c.domain === '') {
+      return { ok: false, error: `Cookie ${c.name} has no domain` }
+    }
+  }
+  const profiles = await getProfiles()
+  const p = profiles.find((x) => x.id === profileId)
+  if (!p) return { ok: false, error: 'Profile not found' }
+  p.cookies = cookies
+  p.localStorage = localStorage
+  p.sessionStorage = sessionStorage
+  p.updatedAt = Date.now()
+  await saveProfiles(profiles)
   return { ok: true, warnings: [] }
 }
 
