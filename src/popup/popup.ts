@@ -22,6 +22,12 @@ const importFile = $<HTMLInputElement>('import-file')
 let tabId = -1
 let siteKey = ''
 let selectedColor = COLORS[3]
+let busy = false
+
+function setBusy(b: boolean): void {
+  busy = b
+  document.body.classList.toggle('busy', b)
+}
 
 void init()
 
@@ -101,6 +107,7 @@ async function renderList(): Promise<void> {
 }
 
 async function deleteProfile(p: SessionProfile): Promise<void> {
+  if (busy) return
   if (!confirm(`Delete profile "${p.name}"? The saved login will be lost.`)) return
   const profiles = await getProfiles()
   await saveProfiles(profiles.filter((x) => x.id !== p.id))
@@ -110,6 +117,8 @@ async function deleteProfile(p: SessionProfile): Promise<void> {
 }
 
 async function doSwitch(targetProfileId: string | null): Promise<void> {
+  if (busy) return
+  setBusy(true)
   const res = (await chrome.runtime.sendMessage({
     type: 'switch',
     tabId,
@@ -117,10 +126,12 @@ async function doSwitch(targetProfileId: string | null): Promise<void> {
     targetProfileId,
   })) as BgResponse | undefined
   if (!res || !res.ok) {
+    setBusy(false)
     showNotice(`Switch failed: ${res ? res.error : 'no response from service worker'}`)
     return
   }
   if (res.warnings.length > 0) {
+    setBusy(false)
     showNotice(`Switched with ${res.warnings.length} warning(s): ${res.warnings[0]}`)
     await renderList()
   } else {
@@ -132,6 +143,8 @@ function wireSessionEvents(): void {
   formEl.addEventListener('submit', (e) => {
     e.preventDefault()
     void (async () => {
+      if (busy) return
+      setBusy(true)
       const res = (await chrome.runtime.sendMessage({
         type: 'saveNew',
         tabId,
@@ -141,11 +154,13 @@ function wireSessionEvents(): void {
         emoji: emojiEl.value.trim() || undefined,
       })) as BgResponse | undefined
       if (!res || !res.ok) {
+        setBusy(false)
         showNotice(`Save failed: ${res ? res.error : 'no response from service worker'}`)
         return
       }
       formEl.reset()
       await renderList()
+      setBusy(false)
     })()
   })
 
@@ -170,6 +185,7 @@ function wireTransferEvents(): void {
 
   importFile.addEventListener('change', () => {
     void (async () => {
+      if (busy) return
       const file = importFile.files?.[0]
       if (!file) return
       try {

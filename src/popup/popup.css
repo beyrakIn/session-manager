@@ -31,3 +31,6 @@ button { padding: 6px 10px; border: 1px solid #d1d5db; border-radius: 6px; backg
 button:hover { background: #f3f4f6; }
 .row { display: flex; gap: 6px; }
 .hint { color: #6b7280; font-size: 11px; margin: 6px 0 0; }
+#profiles { max-height: 220px; overflow-y: auto; }
+body.busy li, body.busy .del { pointer-events: none; opacity: 0.6; }
+body.busy button { pointer-events: none; }
