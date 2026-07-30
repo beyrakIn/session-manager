@@ -3,7 +3,7 @@ import { defineManifest } from '@crxjs/vite-plugin'
 export default defineManifest({
   manifest_version: 3,
   name: 'Session Manager',
-  version: '0.1.0',
+  version: '0.2.0',
   description: 'Save and switch multiple sessions per website.',
   icons: {
     16: 'icons/icon16.png',
