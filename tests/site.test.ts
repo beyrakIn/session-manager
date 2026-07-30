@@ -20,3 +20,13 @@ test('returns null for non-http(s) and invalid URLs', () => {
   expect(siteKeyFromUrl('about:blank')).toBeNull()
   expect(siteKeyFromUrl('not a url')).toBeNull()
 })
+
+test('private-PSL suffixes keep tenant subdomains distinct', () => {
+  expect(siteKeyFromUrl('https://alice.github.io/repo')).toBe('alice.github.io')
+  expect(siteKeyFromUrl('https://bob.github.io/')).toBe('bob.github.io')
+  expect(siteKeyFromUrl('https://shop.myshopify.com/admin')).toBe('shop.myshopify.com')
+})
+
+test('fallback hostname is normalized (trailing dot stripped)', () => {
+  expect(siteKeyFromUrl('http://localhost./x')).toBe('localhost')
+})

@@ -12,7 +12,12 @@ export function siteKeyFromUrl(url: string): string | null {
     return null
   }
   if (u.protocol !== 'http:' && u.protocol !== 'https:') return null
+  // allowPrivateDomains keeps tenant subdomains distinct (alice.github.io vs
+  // bob.github.io) — each is its own cookie boundary per the public suffix list.
   // getDomain returns null for IPs and single-label hosts like localhost —
-  // fall back to the raw hostname so those still work.
-  return getDomain(u.hostname) ?? u.hostname
+  // fall back to the (trailing-dot-normalized) hostname so those still work.
+  return (
+    getDomain(u.hostname, { allowPrivateDomains: true }) ??
+    u.hostname.replace(/\.$/, '')
+  )
 }
