@@ -109,11 +109,16 @@ async function renderList(): Promise<void> {
 async function deleteProfile(p: SessionProfile): Promise<void> {
   if (busy) return
   if (!confirm(`Delete profile "${p.name}"? The saved login will be lost.`)) return
-  const profiles = await getProfiles()
-  await saveProfiles(profiles.filter((x) => x.id !== p.id))
-  const active = await getActiveMap()
-  if (active[siteKey] === p.id) await setActive(siteKey, null)
-  await renderList()
+  setBusy(true)
+  try {
+    const profiles = await getProfiles()
+    await saveProfiles(profiles.filter((x) => x.id !== p.id))
+    const active = await getActiveMap()
+    if (active[siteKey] === p.id) await setActive(siteKey, null)
+    await renderList()
+  } finally {
+    setBusy(false)
+  }
 }
 
 async function doSwitch(targetProfileId: string | null): Promise<void> {
@@ -188,6 +193,7 @@ function wireTransferEvents(): void {
       if (busy) return
       const file = importFile.files?.[0]
       if (!file) return
+      setBusy(true)
       try {
         const imported = parseImport(await file.text())
         const merged = mergeProfiles(await getProfiles(), imported)
@@ -196,8 +202,10 @@ function wireTransferEvents(): void {
         if (siteKey) await renderList()
       } catch (e) {
         showNotice(`Import failed: ${e instanceof Error ? e.message : String(e)}`)
+      } finally {
+        importFile.value = ''
+        setBusy(false)
       }
-      importFile.value = ''
     })()
   })
 }
