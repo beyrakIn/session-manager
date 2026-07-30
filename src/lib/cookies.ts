@@ -41,6 +41,26 @@ export function toSetParams(c: CapturedCookie): chrome.cookies.SetDetails {
   return details
 }
 
+/**
+ * Does this cookie apply to the given hostname? Mirrors RFC 6265 domain
+ * matching: a host-only cookie needs an exact host match, a domain cookie
+ * also covers subdomains. Ports are ignored — cookies are not port-scoped,
+ * so localhost:3000 and localhost:8080 genuinely share a cookie jar.
+ *
+ * Used to narrow the registrable-domain cookie query down to the cookies a
+ * specific subdomain can actually see.
+ */
+export function cookieAppliesToHost(
+  c: { domain: string; hostOnly?: boolean },
+  host: string
+): boolean {
+  const d = c.domain.startsWith('.') ? c.domain.slice(1) : c.domain
+  // Chrome omits the leading dot for host-only cookies; fall back to that
+  // convention for cookies restored from an export without the flag.
+  const hostOnly = c.hostOnly ?? !c.domain.startsWith('.')
+  return hostOnly ? host === d : host === d || host.endsWith(`.${d}`)
+}
+
 /** Rebuild the url needed by chrome.cookies.remove() for a live cookie. */
 export function cookieUrl(c: { domain: string; path: string; secure: boolean }): string {
   const host = c.domain.startsWith('.') ? c.domain.slice(1) : c.domain

@@ -37,7 +37,14 @@ real site (GitHub works well).
 ## Edge cases
 - [ ] Popup on `chrome://extensions` → "Can't manage sessions on this page",
       save/switch disabled, export/import still usable
-- [ ] Popup on a `mail.google.com` tab shows site `google.com`
+- [ ] Popup on `mail.google.com` shows site `mail.google.com`, and its profile
+      list is separate from `accounts.google.com`
+- [ ] Two internal subdomains (e.g. `jira.company.com` / `wiki.company.com`)
+      each show only their own profiles
+- [ ] Two local dev servers on different ports show separate profile lists
+      (`localhost:3000` vs `localhost:8080`)
+- [ ] Switching on a site whose auth cookie is domain-wide (`.company.com`)
+      reports the "shared with other subdomains" warning
 - [ ] Popup on `alice.github.io` shows site `alice.github.io` (NOT `github.io`)
 - [ ] Delete the active profile → no crash; next switch auto-saves to a new
       "Auto-saved …" profile

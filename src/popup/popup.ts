@@ -1,4 +1,4 @@
-import { siteKeyFromUrl } from '../lib/site'
+import { hostFromSiteKey, registrableDomain, siteKeyFromUrl } from '../lib/site'
 import { getActiveMap, getProfiles } from '../lib/store'
 import { serializeExport } from '../lib/transfer'
 import type { BgResponse, SessionProfile } from '../lib/types'
@@ -85,8 +85,11 @@ function renderColorSwatches(): void {
 async function renderList(): Promise<void> {
   const [profiles, active] = await Promise.all([getProfiles(), getActiveMap()])
   const activeId = active[siteKey] ?? null
+  // Profiles saved before session keys became subdomain-aware are keyed by the
+  // registrable domain; keep showing them here so they aren't stranded.
+  const legacyKey = registrableDomain(hostFromSiteKey(siteKey))
   const mine = profiles
-    .filter((p) => p.siteKey === siteKey)
+    .filter((p) => p.siteKey === siteKey || p.siteKey === legacyKey)
     .sort((a, b) => b.updatedAt - a.updatedAt)
 
   listEl.replaceChildren()

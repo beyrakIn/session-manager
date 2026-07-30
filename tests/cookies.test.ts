@@ -1,5 +1,31 @@
 import { expect, test } from 'vitest'
-import { toSetParams, cookieUrl, type CapturedCookie } from '../src/lib/cookies'
+import {
+  cookieAppliesToHost,
+  cookieUrl,
+  toSetParams,
+  type CapturedCookie,
+} from '../src/lib/cookies'
+
+test('cookieAppliesToHost: host-only cookies need an exact host match', () => {
+  const c = { domain: 'jira.company.com', hostOnly: true }
+  expect(cookieAppliesToHost(c, 'jira.company.com')).toBe(true)
+  expect(cookieAppliesToHost(c, 'wiki.company.com')).toBe(false)
+  expect(cookieAppliesToHost(c, 'company.com')).toBe(false)
+})
+
+test('cookieAppliesToHost: domain cookies also cover subdomains', () => {
+  const c = { domain: '.company.com', hostOnly: false }
+  expect(cookieAppliesToHost(c, 'company.com')).toBe(true)
+  expect(cookieAppliesToHost(c, 'jira.company.com')).toBe(true)
+  expect(cookieAppliesToHost(c, 'deep.jira.company.com')).toBe(true)
+  expect(cookieAppliesToHost(c, 'othercompany.com')).toBe(false)
+  expect(cookieAppliesToHost(c, 'notcompany.com')).toBe(false)
+})
+
+test('cookieAppliesToHost: infers host-only from the missing leading dot', () => {
+  expect(cookieAppliesToHost({ domain: 'jira.company.com' }, 'wiki.company.com')).toBe(false)
+  expect(cookieAppliesToHost({ domain: '.company.com' }, 'wiki.company.com')).toBe(true)
+})
 
 function cookie(overrides: Partial<CapturedCookie>): CapturedCookie {
   return {

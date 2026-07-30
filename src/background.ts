@@ -1,11 +1,16 @@
-import { cookieUrl, toSetParams, type CapturedCookie } from './lib/cookies'
+import {
+  cookieAppliesToHost,
+  cookieUrl,
+  toSetParams,
+  type CapturedCookie,
+} from './lib/cookies'
 import {
   applyAutoSave,
   countProfilesForSite,
   newProfile,
   type SessionSnapshot,
 } from './lib/profiles'
-import { siteKeyFromUrl } from './lib/site'
+import { hostFromSiteKey, registrableDomain, siteKeyFromUrl } from './lib/site'
 import { getActiveMap, getProfiles, saveProfiles, setActive } from './lib/store'
 import { mergeProfiles, parseImport } from './lib/transfer'
 import {
@@ -57,9 +62,22 @@ interface Snapshot extends SessionSnapshot {
   warnings: string[]
 }
 
+/**
+ * Cookies the given site key can actually see: query the whole registrable
+ * domain (so parent-domain cookies like .company.com are included), then keep
+ * only those whose domain matches this specific host.
+ */
+async function cookiesForSite(siteKey: string): Promise<CapturedCookie[]> {
+  const host = hostFromSiteKey(siteKey)
+  const all = (await chrome.cookies.getAll({
+    domain: registrableDomain(host),
+  })) as CapturedCookie[]
+  return all.filter((c) => cookieAppliesToHost(c, host))
+}
+
 async function captureSession(tabId: number, siteKey: string): Promise<Snapshot> {
   const warnings: string[] = []
-  const cookies = (await chrome.cookies.getAll({ domain: siteKey })) as CapturedCookie[]
+  const cookies = await cookiesForSite(siteKey)
   let localStorage: Record<string, string> = {}
   let sessionStorage: Record<string, string> = {}
   let storageRead = false
@@ -80,13 +98,24 @@ async function captureSession(tabId: number, siteKey: string): Promise<Snapshot>
 }
 
 async function clearCookies(siteKey: string, warnings: string[]): Promise<void> {
-  const cookies = await chrome.cookies.getAll({ domain: siteKey })
+  const host = hostFromSiteKey(siteKey)
+  const cookies = await cookiesForSite(siteKey)
+  let shared = 0
   for (const c of cookies) {
     try {
       await chrome.cookies.remove({ url: cookieUrl(c), name: c.name, storeId: c.storeId })
+      // A cookie scoped to a parent domain (.company.com) is shared with every
+      // sibling subdomain — the browser gives us no way to clear it for this
+      // host only, so say so rather than silently signing the user out there.
+      if (!cookieAppliesToHost({ domain: c.domain, hostOnly: true }, host)) shared++
     } catch {
       warnings.push(`Could not remove cookie ${c.name}`)
     }
+  }
+  if (shared > 0) {
+    warnings.push(
+      `${shared} cookie(s) are shared with other subdomains of ${registrableDomain(host)} — you may need to sign in again there`
+    )
   }
 }
 

@@ -1,18 +1,34 @@
 import { expect, test } from 'vitest'
-import { siteKeyFromUrl } from '../src/lib/site'
+import { hostFromSiteKey, registrableDomain, siteKeyFromUrl } from '../src/lib/site'
 
-test('maps subdomains to the registrable domain', () => {
-  expect(siteKeyFromUrl('https://mail.google.com/mail/u/0')).toBe('google.com')
-  expect(siteKeyFromUrl('https://github.com/settings')).toBe('github.com')
+test('each subdomain is its own site key', () => {
+  expect(siteKeyFromUrl('https://jira.company.com/browse/X')).toBe('jira.company.com')
+  expect(siteKeyFromUrl('https://wiki.company.com/')).toBe('wiki.company.com')
+  expect(siteKeyFromUrl('https://company.com/')).toBe('company.com')
+  expect(siteKeyFromUrl('https://mail.google.com/mail/u/0')).toBe('mail.google.com')
 })
 
-test('handles multi-part public suffixes correctly', () => {
-  expect(siteKeyFromUrl('https://www.example.co.uk/')).toBe('example.co.uk')
+test('port is part of the site key when present', () => {
+  expect(siteKeyFromUrl('http://localhost:3000/app')).toBe('localhost:3000')
+  expect(siteKeyFromUrl('http://localhost:8080/app')).toBe('localhost:8080')
+  expect(siteKeyFromUrl('http://localhost/app')).toBe('localhost')
+  expect(siteKeyFromUrl('https://app.example.com:8443/x')).toBe('app.example.com:8443')
 })
 
-test('falls back to hostname for localhost and IPs', () => {
-  expect(siteKeyFromUrl('http://localhost:3000/app')).toBe('localhost')
+test('default ports are not part of the site key', () => {
+  expect(siteKeyFromUrl('https://example.com:443/x')).toBe('example.com')
+  expect(siteKeyFromUrl('http://example.com:80/x')).toBe('example.com')
+})
+
+test('host is lowercased and trailing dot stripped', () => {
+  expect(siteKeyFromUrl('https://JIRA.Company.COM/x')).toBe('jira.company.com')
+  expect(siteKeyFromUrl('http://localhost./x')).toBe('localhost')
+})
+
+test('IP hosts work, including IPv6 literals', () => {
   expect(siteKeyFromUrl('http://192.168.1.5/admin')).toBe('192.168.1.5')
+  expect(siteKeyFromUrl('http://192.168.1.5:9000/admin')).toBe('192.168.1.5:9000')
+  expect(siteKeyFromUrl('http://[::1]:3000/x')).toBe('[::1]:3000')
 })
 
 test('returns null for non-http(s) and invalid URLs', () => {
@@ -21,12 +37,19 @@ test('returns null for non-http(s) and invalid URLs', () => {
   expect(siteKeyFromUrl('not a url')).toBeNull()
 })
 
-test('private-PSL suffixes keep tenant subdomains distinct', () => {
-  expect(siteKeyFromUrl('https://alice.github.io/repo')).toBe('alice.github.io')
-  expect(siteKeyFromUrl('https://bob.github.io/')).toBe('bob.github.io')
-  expect(siteKeyFromUrl('https://shop.myshopify.com/admin')).toBe('shop.myshopify.com')
+test('hostFromSiteKey drops the port, including for IPv6', () => {
+  expect(hostFromSiteKey('jira.company.com')).toBe('jira.company.com')
+  expect(hostFromSiteKey('localhost:3000')).toBe('localhost')
+  expect(hostFromSiteKey('[::1]:3000')).toBe('[::1]')
+  expect(hostFromSiteKey('[::1]')).toBe('[::1]')
 })
 
-test('fallback hostname is normalized (trailing dot stripped)', () => {
-  expect(siteKeyFromUrl('http://localhost./x')).toBe('localhost')
+test('registrableDomain returns the widest scope a host cookie can use', () => {
+  expect(registrableDomain('jira.company.com')).toBe('company.com')
+  expect(registrableDomain('www.example.co.uk')).toBe('example.co.uk')
+  // private-PSL tenants are their own boundary
+  expect(registrableDomain('alice.github.io')).toBe('alice.github.io')
+  // hosts with no registrable domain fall back to themselves
+  expect(registrableDomain('localhost')).toBe('localhost')
+  expect(registrableDomain('192.168.1.5')).toBe('192.168.1.5')
 })
