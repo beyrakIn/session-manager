@@ -55,6 +55,7 @@ async function init(): Promise<void> {
     freshBtn.disabled = true
     siteEl.textContent = '—'
     wireTransferEvents() // export/import still work anywhere
+    wirePasteImport()
     return
   }
   tabId = tab.id
@@ -64,6 +65,7 @@ async function init(): Promise<void> {
   await renderList()
   wireSessionEvents()
   wireTransferEvents()
+  wirePasteImport()
 }
 
 function showNotice(text: string): void {
@@ -109,16 +111,27 @@ async function renderList(): Promise<void> {
     name.className = 'name'
     name.textContent = `${p.emoji ? p.emoji + ' ' : ''}${p.name}${p.id === activeId ? ' ✓' : ''}`
 
+    const copy = document.createElement('button')
+    copy.className = 'del'
+    copy.textContent = '⧉'
+    copy.title = 'Copy this session to the clipboard'
+    copy.setAttribute('aria-label', `Copy ${p.name}`)
+    copy.addEventListener('click', (e) => {
+      e.stopPropagation()
+      void copyProfile(p)
+    })
+
     const del = document.createElement('button')
     del.className = 'del'
     del.textContent = '✕'
     del.title = 'Delete profile'
+    del.setAttribute('aria-label', `Delete ${p.name}`)
     del.addEventListener('click', (e) => {
       e.stopPropagation()
       void deleteProfile(p)
     })
 
-    li.append(dot, name, del)
+    li.append(dot, name, copy, del)
     li.addEventListener('click', () => void doSwitch(p.id))
     listEl.appendChild(li)
   }
@@ -201,6 +214,45 @@ function wireSessionEvents(): void {
   })
 
   freshBtn.addEventListener('click', () => void doSwitch(null))
+}
+
+/** Copy one session as the same JSON the file export uses. */
+async function copyProfile(p: SessionProfile): Promise<void> {
+  if (busy) return
+  try {
+    await navigator.clipboard.writeText(serializeExport([p]))
+    showNotice(`Copied "${p.name}" — paste it with Ctrl+V here or on another machine.`)
+  } catch (e) {
+    showNotice(`Copy failed: ${e instanceof Error ? e.message : String(e)}`)
+  }
+}
+
+/**
+ * Paste-to-import. Reading the clipboard directly would need the
+ * clipboardRead permission; capturing the paste event needs none, and Ctrl+V
+ * anywhere in the popup is the same single gesture.
+ */
+function wirePasteImport(): void {
+  document.addEventListener('paste', (e) => {
+    if (busy) return
+    const text = e.clipboardData?.getData('text')
+    if (!text || !text.includes('session-manager')) return
+    e.preventDefault()
+    void (async () => {
+      setBusy(true)
+      try {
+        const res = await send({ type: 'importProfiles', json: text })
+        if (!res || !res.ok) {
+          showNotice(`Paste failed: ${res ? res.error : 'no response from service worker'}`)
+          return
+        }
+        showNotice(`Pasted ${res.imported ?? 0} session(s) from the clipboard.`)
+        if (siteKey) await renderList()
+      } finally {
+        setBusy(false)
+      }
+    })()
+  })
 }
 
 function wireTransferEvents(): void {
