@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest'
-import { toSetParams, type CapturedCookie } from '../src/lib/cookies'
+import { toSetParams, cookieUrl, type CapturedCookie } from '../src/lib/cookies'
 
 function cookie(overrides: Partial<CapturedCookie>): CapturedCookie {
   return {
@@ -53,4 +53,21 @@ test('__Host- cookie: no domain, path preserved as /', () => {
 test('non-root path is used in the url', () => {
   const p = toSetParams(cookie({ path: '/api', domain: 'example.com', hostOnly: true }))
   expect(p.url).toBe('https://example.com/api')
+})
+
+test('sameSite is passed through unchanged', () => {
+  expect(toSetParams(cookie({ sameSite: 'strict' })).sameSite).toBe('strict')
+  expect(toSetParams(cookie({ sameSite: 'no_restriction' })).sameSite).toBe('no_restriction')
+})
+
+test('__Host- cookie omits domain even if hostOnly is false', () => {
+  const p = toSetParams(
+    cookie({ name: '__Host-x', domain: 'app.example.com', hostOnly: false, path: '/' })
+  )
+  expect(p.domain).toBeUndefined()
+})
+
+test('cookieUrl builds scheme/host/path for removal', () => {
+  expect(cookieUrl({ domain: '.github.com', path: '/', secure: true })).toBe('https://github.com/')
+  expect(cookieUrl({ domain: 'example.com', path: '/api', secure: false })).toBe('http://example.com/api')
 })
