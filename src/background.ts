@@ -220,6 +220,7 @@ async function importProfilesOp({ json }: ImportProfilesRequest): Promise<BgResp
 // ---- Toolbar badge: profile count for the site in the focused tab ----------
 
 void chrome.action.setBadgeBackgroundColor({ color: '#3b82f6' })
+void chrome.action.setBadgeTextColor({ color: '#ffffff' })
 
 async function updateBadge(tabId: number, url: string | undefined): Promise<void> {
   const key = url ? siteKeyFromUrl(url) : null
