@@ -820,6 +820,103 @@ tbody tr.flash { animation: flash 700ms var(--ease); }
   margin-bottom: 6px;
 }
 
+/* ---------- security + unlock ---------- */
+
+.nav-security { margin-top: 6px; }
+.nav-security .nav-count { text-transform: none; }
+
+#security {
+  width: min(560px, 100vw);
+  max-width: none;
+  height: 100vh;
+  max-height: 100vh;
+  margin: 0 0 0 auto;
+  padding: 0;
+  border: none;
+  border-left: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--ink);
+  display: flex;
+  flex-direction: column;
+}
+#security[open] { animation: drawer-in 240ms var(--ease); }
+#security::backdrop { background: rgba(10, 12, 16, 0.42); }
+
+.prose {
+  margin: 0 0 12px;
+  color: var(--ink-2);
+  max-width: 62ch;
+  font-size: 13px;
+}
+.prose.warn {
+  padding: 10px 12px;
+  border: 1px solid var(--warn-line);
+  border-radius: var(--r-md);
+  background: var(--warn-bg);
+  color: var(--warn-ink);
+}
+
+#security form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+#security input[type='password'],
+#security input[type='number'] {
+  flex: 1;
+  min-width: 180px;
+  padding: 8px 11px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+}
+#security input[type='number'] { flex: none; width: 92px; }
+#security input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+#security .unit { color: var(--ink-3); font-size: 12.5px; margin-right: auto; }
+#enable-form button, #disable-form button { flex: none; }
+
+.btn-danger-solid {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #fff;
+  font-weight: 600;
+}
+.btn-danger-solid:hover { background: var(--danger-hover); border-color: var(--danger-hover); }
+
+#unlock {
+  width: min(420px, 92vw);
+  padding: 24px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--shadow-2);
+}
+#unlock::backdrop { background: rgba(10, 12, 16, 0.55); }
+#unlock h2 { margin: 0 0 6px; font-size: 17px; font-weight: 620; }
+#unlock form { display: flex; flex-direction: column; gap: 10px; }
+#unlock input {
+  padding: 9px 12px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-md);
+  background: var(--bg);
+  color: var(--ink);
+  font: inherit;
+}
+#unlock input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
 /* ---------- responsive ---------- */
 
 @media (max-width: 900px) {

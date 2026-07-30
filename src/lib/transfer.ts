@@ -1,9 +1,60 @@
+import type { EncryptedBlob } from './crypto'
 import type { SessionProfile } from './types'
 
 interface ExportFile {
   app: 'session-manager'
   version: 1
   profiles: SessionProfile[]
+}
+
+/** Version 2 = the same backup, encrypted with the vault passphrase. */
+export interface EncryptedExportFile {
+  app: 'session-manager'
+  version: 2
+  encrypted: true
+  salt: string
+  iterations: number
+  blob: EncryptedBlob
+}
+
+export function serializeEncryptedExport(
+  salt: string,
+  iterations: number,
+  blob: EncryptedBlob
+): string {
+  const file: EncryptedExportFile = {
+    app: 'session-manager',
+    version: 2,
+    encrypted: true,
+    salt,
+    iterations,
+    blob,
+  }
+  return JSON.stringify(file, null, 2)
+}
+
+/** The envelope of an encrypted export, or null if this isn't one. */
+export function parseEncryptedExport(json: string): EncryptedExportFile | null {
+  let data: unknown
+  try {
+    data = JSON.parse(json)
+  } catch {
+    return null
+  }
+  const f = data as Partial<EncryptedExportFile> | null
+  if (
+    typeof f !== 'object' ||
+    f === null ||
+    f.app !== 'session-manager' ||
+    f.version !== 2 ||
+    typeof f.salt !== 'string' ||
+    typeof f.iterations !== 'number' ||
+    typeof f.blob?.iv !== 'string' ||
+    typeof f.blob?.ct !== 'string'
+  ) {
+    return null
+  }
+  return f as EncryptedExportFile
 }
 
 export function serializeExport(profiles: SessionProfile[]): string {

@@ -10,9 +10,34 @@ import {
   newProfile,
   type SessionSnapshot,
 } from './lib/profiles'
+import { KDF_ITERATIONS, decryptJson, deriveKey, encryptJson, newSalt } from './lib/crypto'
+import {
+  LockedError,
+  clearSessionKey,
+  getLockSettings,
+  getSessionKey,
+  getVault,
+  isLocked,
+  isProtected,
+  setLockSettings,
+  setSessionKey,
+  setVault,
+} from './lib/lock'
 import { hostFromSiteKey, registrableDomain, siteKeyFromUrl } from './lib/site'
-import { getActiveMap, getProfiles, saveProfiles, setActive } from './lib/store'
-import { mergeProfiles, parseImport } from './lib/transfer'
+import {
+  getActiveMap,
+  getProfiles,
+  removePlaintextProfiles,
+  saveProfiles,
+  setActive,
+} from './lib/store'
+import {
+  mergeProfiles,
+  parseEncryptedExport,
+  parseImport,
+  serializeEncryptedExport,
+  serializeExport,
+} from './lib/transfer'
 import {
   clearStoragesInPage,
   readStoragesInPage,
@@ -23,7 +48,12 @@ import type {
   BgResponse,
   DeleteProfileRequest,
   DeleteProfilesRequest,
+  DisableProtectionRequest,
+  EnableProtectionRequest,
   ImportProfilesRequest,
+  LockState,
+  SetLockTimeoutRequest,
+  UnlockRequest,
   SaveNewRequest,
   SessionProfile,
   SwitchRequest,
@@ -40,11 +70,27 @@ let queue: Promise<unknown> = Promise.resolve()
 chrome.runtime.onMessage.addListener((msg: BgRequest, _sender, sendResponse) => {
   const run = queue.then(() => handle(msg))
   queue = run.catch(() => undefined) // keep the queue alive after failures
-  run.then(sendResponse, (e) =>
-    sendResponse({ ok: false, error: String(e instanceof Error ? e.message : e) })
+  run.then(
+    (res) => {
+      // Any successful use of an unlocked vault pushes the idle timer out, so
+      // active work never locks under you.
+      if (res.ok && msg.type !== 'lock') void touchAutoLock()
+      sendResponse(res)
+    },
+    (e) => {
+      if (e instanceof LockedError) {
+        sendResponse({ ok: false, error: e.message, locked: true })
+        return
+      }
+      sendResponse({ ok: false, error: String(e instanceof Error ? e.message : e) })
+    }
   )
   return true // keep the channel open for the async response
 })
+
+async function touchAutoLock(): Promise<void> {
+  if ((await isProtected()) && !(await isLocked())) await armAutoLock()
+}
 
 async function handle(msg: BgRequest): Promise<BgResponse> {
   switch (msg.type) {
@@ -62,6 +108,20 @@ async function handle(msg: BgRequest): Promise<BgResponse> {
       return deleteProfilesOp(msg)
     case 'updateProfileData':
       return updateProfileDataOp(msg)
+    case 'lockState':
+      return { ok: true, warnings: [], lock: await lockState() }
+    case 'lock':
+      return lockOp()
+    case 'unlock':
+      return unlockOp(msg)
+    case 'enableProtection':
+      return enableProtectionOp(msg)
+    case 'disableProtection':
+      return disableProtectionOp(msg)
+    case 'setLockTimeout':
+      return setLockTimeoutOp(msg)
+    case 'exportAll':
+      return exportAllOp()
     default:
       return { ok: false, error: 'Unknown message type' }
   }
@@ -255,11 +315,41 @@ async function deleteProfileOp({ profileId, siteKey }: DeleteProfileRequest): Pr
   return { ok: true, warnings: [] }
 }
 
-async function importProfilesOp({ json }: ImportProfilesRequest): Promise<BgResponse> {
-  const imported = parseImport(json) // throws → listener error path replies {ok:false}
+async function importProfilesOp({ json, passphrase }: ImportProfilesRequest): Promise<BgResponse> {
+  const sealed = parseEncryptedExport(json)
+  let imported: SessionProfile[]
+  if (sealed) {
+    if (!passphrase) {
+      return { ok: false, error: 'This backup is encrypted — enter the password it was made with' }
+    }
+    const key = await deriveKey(passphrase, sealed.salt, sealed.iterations)
+    try {
+      imported = await decryptJson<SessionProfile[]>(key, sealed.blob)
+    } catch {
+      return { ok: false, error: 'Wrong password for this backup' }
+    }
+  } else {
+    imported = parseImport(json) // throws → listener error path replies {ok:false}
+  }
   const merged = mergeProfiles(await getProfiles(), imported)
   await saveProfiles(merged)
   return { ok: true, warnings: [], imported: imported.length }
+}
+
+/** Export goes through the worker so the vault key never leaves it. */
+async function exportAllOp(): Promise<BgResponse> {
+  const profiles = await getProfiles() // throws LockedError while locked
+  const vault = await getVault()
+  if (!vault) return { ok: true, warnings: [], json: serializeExport(profiles) }
+
+  const key = await getSessionKey()
+  if (!key) throw new LockedError()
+  const blob = await encryptJson(key, profiles)
+  return {
+    ok: true,
+    warnings: [],
+    json: serializeEncryptedExport(vault.salt, vault.iterations, blob),
+  }
 }
 
 async function updateProfileOp({
@@ -320,12 +410,111 @@ async function updateProfileDataOp({
   return { ok: true, warnings: [] }
 }
 
+// ---- Lock, passphrase protection, auto-lock --------------------------------
+
+const LOCK_ALARM = 'auto-lock'
+
+async function lockState(): Promise<LockState> {
+  const { timeoutMinutes } = await getLockSettings()
+  return { protected: await isProtected(), locked: await isLocked(), timeoutMinutes }
+}
+
+/** Restart the idle countdown. Any successful unlocked operation extends it. */
+async function armAutoLock(): Promise<void> {
+  const { timeoutMinutes } = await getLockSettings()
+  await chrome.alarms.create(LOCK_ALARM, { delayInMinutes: timeoutMinutes })
+}
+
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name === LOCK_ALARM) void clearSessionKey()
+})
+
+async function lockOp(): Promise<BgResponse> {
+  await clearSessionKey()
+  await chrome.alarms.clear(LOCK_ALARM)
+  return { ok: true, warnings: [], lock: await lockState() }
+}
+
+async function unlockOp({ passphrase }: UnlockRequest): Promise<BgResponse> {
+  const vault = await getVault()
+  if (!vault) return { ok: false, error: 'Protection is not enabled' }
+  const key = await deriveKey(passphrase, vault.salt, vault.iterations)
+  try {
+    // Decrypting is the passphrase check: AES-GCM authenticates, so a wrong
+    // key throws here rather than yielding garbage.
+    await decryptJson(key, vault.blob)
+  } catch {
+    return { ok: false, error: 'Wrong password' }
+  }
+  await setSessionKey(key)
+  await armAutoLock()
+  return { ok: true, warnings: [], lock: await lockState() }
+}
+
+async function enableProtectionOp({ passphrase }: EnableProtectionRequest): Promise<BgResponse> {
+  if (await isProtected()) return { ok: false, error: 'Protection is already enabled' }
+  if (passphrase.length < 8) {
+    return { ok: false, error: 'Use a password of at least 8 characters' }
+  }
+  const profiles = await getProfiles() // still plaintext at this point
+  const salt = newSalt()
+  const key = await deriveKey(passphrase, salt, KDF_ITERATIONS)
+  await setVault({
+    v: 1,
+    salt,
+    iterations: KDF_ITERATIONS,
+    blob: await encryptJson(key, profiles),
+  })
+  // Only drop the readable copy once the encrypted one is committed.
+  await removePlaintextProfiles()
+  await setSessionKey(key)
+  await armAutoLock()
+  return { ok: true, warnings: [], lock: await lockState() }
+}
+
+async function disableProtectionOp({ passphrase }: DisableProtectionRequest): Promise<BgResponse> {
+  const vault = await getVault()
+  if (!vault) return { ok: false, error: 'Protection is not enabled' }
+  const key = await deriveKey(passphrase, vault.salt, vault.iterations)
+  let profiles: SessionProfile[]
+  try {
+    profiles = await decryptJson<SessionProfile[]>(key, vault.blob)
+  } catch {
+    return { ok: false, error: 'Wrong password' }
+  }
+  // Write the plaintext copy before removing the vault, so a failure here
+  // can't leave the profiles in neither place.
+  await chrome.storage.local.set({ profiles })
+  await setVault(null)
+  await clearSessionKey()
+  await chrome.alarms.clear(LOCK_ALARM)
+  return { ok: true, warnings: [], lock: await lockState() }
+}
+
+async function setLockTimeoutOp({ minutes }: SetLockTimeoutRequest): Promise<BgResponse> {
+  if (!Number.isFinite(minutes) || minutes < 1 || minutes > 24 * 60) {
+    return { ok: false, error: 'Auto-lock must be between 1 minute and 24 hours' }
+  }
+  await setLockSettings({ timeoutMinutes: Math.round(minutes) })
+  if (!(await isLocked()) && (await isProtected())) await armAutoLock()
+  return { ok: true, warnings: [], lock: await lockState() }
+}
+
 // ---- Toolbar badge: profile count for the site in the focused tab ----------
 
 void chrome.action.setBadgeBackgroundColor({ color: '#3b82f6' })
 void chrome.action.setBadgeTextColor({ color: '#ffffff' })
 
 async function updateBadge(tabId: number, url: string | undefined): Promise<void> {
+  // A count is still information about the vault — show a lock instead.
+  if (await isLocked()) {
+    try {
+      await chrome.action.setBadgeText({ tabId, text: '🔒' })
+    } catch {
+      /* tab closed */
+    }
+    return
+  }
   const key = url ? siteKeyFromUrl(url) : null
   // Count legacy (registrable-domain) profiles too, so the badge matches what
   // the popup actually lists.

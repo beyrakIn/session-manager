@@ -14,8 +14,14 @@ a time.
 - Dashboard (right-click the icon → Options, or "Manage all sessions" in the
   popup) lists every saved session across every site, with rename/recolor,
   bulk delete, storage stats, and switch-from-anywhere
+- Copy a single session to the clipboard and paste it back (or on another
+  machine) with Ctrl+V
+- Inspect and hand-edit a profile's cookies and web storage from the dashboard
+- Optional password protection: encrypts every saved session at rest
+  (AES-GCM, key derived with PBKDF2-SHA256), with auto-lock after a
+  configurable idle period (default 1 hour)
 - Export/import all profiles as JSON (**the file contains login credentials —
-  treat it like a password**)
+  treat it like a password**; with protection on, the export is encrypted)
 
 ## Development
 
@@ -36,7 +42,12 @@ select `dist/`.
   registrable domains, may require a re-login after switching.
 - Sessions cannot run simultaneously in different tabs — switching is
   one-at-a-time per site.
-- Profiles are stored unencrypted in `chrome.storage.local`.
+- Profiles are stored unencrypted in `chrome.storage.local` unless password
+  protection is turned on in the dashboard. There is no password recovery: a
+  forgotten password means the encrypted sessions are unreadable.
+- Even with protection on, the map of which profile is active per site stays
+  readable (it holds no credentials), and a session is necessarily decrypted
+  in memory while you use it.
 - Partitioned (CHIPS) third-party cookies are not captured or cleared.
 - Sessions are scoped per origin — `jira.company.com`, `wiki.company.com` and
   `localhost:3000` each keep their own profiles. Cookies, however, are not

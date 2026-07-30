@@ -9,7 +9,7 @@ import {
 } from '../lib/inspect'
 import { siteUrlFromKey } from '../lib/site'
 import { getActiveMap, getProfiles } from '../lib/store'
-import type { BgResponse, SessionProfile } from '../lib/types'
+import type { BgResponse, LockState, SessionProfile } from '../lib/types'
 
 const COLORS = ['#ef4444', '#f59e0b', '#10b981', '#2563eb', '#8b5cf6', '#6b7280']
 const TAB_LOAD_TIMEOUT_MS = 20_000
@@ -43,12 +43,25 @@ let editingId: string | null = null
 let busy = false
 
 renderSkeleton()
-void load()
+void (async () => {
+  await refreshLockState()
+  await load()
+})()
 
 /* ------------------------------- data ---------------------------------- */
 
 async function load(): Promise<void> {
-  ;[profiles, active] = await Promise.all([getProfiles(), getActiveMap()])
+  try {
+    ;[profiles, active] = await Promise.all([getProfiles(), getActiveMap()])
+  } catch {
+    // Locked (or unreadable): show nothing and let the gate take over rather
+    // than rendering a misleading empty library.
+    profiles = []
+    active = {}
+    render()
+    await refreshLockState()
+    return
+  }
   if (site && !profiles.some((p) => p.siteKey === site)) site = null
   render()
   void renderStorage()
@@ -906,6 +919,129 @@ drawer.addEventListener('close', () => {
 $('drawer-close').addEventListener('click', () => drawer.close())
 $('drawer-cancel').addEventListener('click', () => drawer.close())
 drawerSave.addEventListener('click', () => void withPending(drawerSave, saveDrawer))
+
+/* --------------------------- lock + security ---------------------------- */
+
+const securityDlg = $<HTMLDialogElement>('security')
+const unlockDlg = $<HTMLDialogElement>('unlock')
+const unlockPass = $<HTMLInputElement>('unlock-pass')
+const unlockError = $('unlock-error')
+const securityState = $('security-state')
+const securityStatus = $('security-status')
+const protectOff = $('protect-off')
+const protectOn = $('protect-on')
+const timeoutMins = $<HTMLInputElement>('timeout-mins')
+
+async function refreshLockState(): Promise<LockState | null> {
+  const res = await send({ type: 'lockState' })
+  const lock = res.ok ? res.lock : undefined
+  if (!lock) return null
+
+  securityState.textContent = lock.protected ? (lock.locked ? 'Locked' : 'On') : 'Off'
+  protectOff.hidden = lock.protected
+  protectOn.hidden = !lock.protected
+  timeoutMins.value = String(lock.timeoutMinutes)
+
+  if (lock.locked) {
+    if (!unlockDlg.open) {
+      unlockDlg.showModal()
+      unlockPass.focus()
+    }
+  } else if (unlockDlg.open) {
+    unlockDlg.close()
+  }
+  return lock
+}
+
+$('unlock-go').addEventListener('click', () => {
+  void (async () => {
+    const res = await send({ type: 'unlock', passphrase: unlockPass.value })
+    if (!res.ok) {
+      unlockError.hidden = false
+      unlockError.textContent = res.error
+      unlockPass.select()
+      return
+    }
+    unlockError.hidden = true
+    unlockPass.value = ''
+    unlockDlg.close()
+    await refreshLockState()
+    await load()
+  })()
+})
+unlockPass.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault()
+    $('unlock-go').click()
+  }
+})
+// The lock gate is not dismissible: there is nothing to show behind it.
+unlockDlg.addEventListener('cancel', (e) => e.preventDefault())
+
+$('open-security').addEventListener('click', () => {
+  securityStatus.textContent = ''
+  void refreshLockState()
+  securityDlg.showModal()
+})
+$('security-close').addEventListener('click', () => securityDlg.close())
+
+$<HTMLFormElement>('enable-form').addEventListener('submit', (e) => {
+  e.preventDefault()
+  void (async () => {
+    const p1 = $<HTMLInputElement>('pass1').value
+    const p2 = $<HTMLInputElement>('pass2').value
+    if (p1 !== p2) {
+      securityStatus.textContent = 'The two passwords do not match.'
+      return
+    }
+    if (!confirm('There is no way to recover a forgotten password. Continue?')) return
+    const res = await send({ type: 'enableProtection', passphrase: p1 })
+    securityStatus.textContent = res.ok
+      ? 'Protection is on. Your sessions are now encrypted.'
+      : res.error
+    if (res.ok) {
+      $<HTMLInputElement>('pass1').value = ''
+      $<HTMLInputElement>('pass2').value = ''
+      await refreshLockState()
+      await load()
+    }
+  })()
+})
+
+$<HTMLFormElement>('disable-form').addEventListener('submit', (e) => {
+  e.preventDefault()
+  void (async () => {
+    const pass = $<HTMLInputElement>('disable-pass')
+    const res = await send({ type: 'disableProtection', passphrase: pass.value })
+    securityStatus.textContent = res.ok
+      ? 'Protection is off. Sessions are stored unencrypted again.'
+      : res.error
+    if (res.ok) {
+      pass.value = ''
+      await refreshLockState()
+      await load()
+    }
+  })()
+})
+
+$<HTMLFormElement>('timeout-form').addEventListener('submit', (e) => {
+  e.preventDefault()
+  void (async () => {
+    const res = await send({ type: 'setLockTimeout', minutes: Number(timeoutMins.value) })
+    securityStatus.textContent = res.ok
+      ? `Auto-lock set to ${timeoutMins.value} minutes.`
+      : res.error
+    await refreshLockState()
+  })()
+})
+
+$('lock-now').addEventListener('click', () => {
+  void (async () => {
+    await send({ type: 'lock' })
+    securityDlg.close()
+    await refreshLockState()
+  })()
+})
 
 /* ------------------------------- events --------------------------------- */
 

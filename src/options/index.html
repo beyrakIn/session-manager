@@ -15,6 +15,11 @@
 
         <nav id="site-nav" aria-label="Sites"></nav>
 
+        <button id="open-security" type="button" class="nav-item nav-security">
+          <span class="nav-label">Security</span>
+          <span id="security-state" class="nav-count">Off</span>
+        </button>
+
         <div class="sidebar-foot">
           <div class="meter-label">
             <span>Storage used</span>
@@ -95,6 +100,76 @@
         <button id="drawer-cancel" type="button" class="btn">Cancel</button>
         <button id="drawer-save" type="button" class="btn btn-primary">Save changes</button>
       </footer>
+    </dialog>
+
+    <dialog id="security" aria-label="Security">
+      <header class="drawer-head">
+        <div>
+          <h2>Security</h2>
+          <p>Password protection and auto-lock</p>
+        </div>
+        <button id="security-close" type="button" class="btn btn-icon" aria-label="Close">✕</button>
+      </header>
+
+      <div id="drawer-body">
+        <section id="protect-off">
+          <div class="section-head"><h3>Password protection</h3></div>
+          <p class="prose">
+            Sessions are stored unencrypted today. Turning this on encrypts every
+            saved session with a password you choose, using AES-GCM with a key
+            derived from that password. The key is never written to disk.
+          </p>
+          <p class="prose warn">
+            There is no recovery. If you forget the password, every saved session
+            is permanently unreadable.
+          </p>
+          <form id="enable-form">
+            <input id="pass1" type="password" placeholder="New password (min 8 characters)"
+              autocomplete="new-password" minlength="8" required />
+            <input id="pass2" type="password" placeholder="Repeat password"
+              autocomplete="new-password" minlength="8" required />
+            <button type="submit" class="btn btn-primary">Turn on protection</button>
+          </form>
+        </section>
+
+        <section id="protect-on" hidden>
+          <div class="section-head"><h3>Password protection</h3><span class="count">On</span></div>
+          <p class="prose">Saved sessions are encrypted at rest.</p>
+
+          <div class="section-head"><h3>Auto-lock</h3></div>
+          <p class="prose">Lock after this long without activity.</p>
+          <form id="timeout-form">
+            <input id="timeout-mins" type="number" min="1" max="1440" step="1"
+              aria-label="Auto-lock after (minutes)" />
+            <span class="unit">minutes</span>
+            <button type="submit" class="btn">Save</button>
+          </form>
+
+          <div class="section-head"><h3>Turn protection off</h3></div>
+          <p class="prose">Decrypts every session back to plain storage.</p>
+          <form id="disable-form">
+            <input id="disable-pass" type="password" placeholder="Current password"
+              autocomplete="current-password" required />
+            <button type="submit" class="btn btn-danger-solid">Turn off</button>
+          </form>
+
+          <div class="section-head"><h3>Lock now</h3></div>
+          <button id="lock-now" type="button" class="btn">Lock</button>
+        </section>
+
+        <p id="security-status" class="prose" role="status"></p>
+      </div>
+    </dialog>
+
+    <dialog id="unlock" aria-label="Unlock">
+      <form id="unlock-form" method="dialog">
+        <h2>Session Manager is locked</h2>
+        <p class="prose">Enter your password to see and manage your saved sessions.</p>
+        <input id="unlock-pass" type="password" placeholder="Password"
+          autocomplete="current-password" required />
+        <p id="unlock-error" class="prose warn" hidden></p>
+        <button type="button" id="unlock-go" class="btn btn-primary">Unlock</button>
+      </form>
     </dialog>
 
     <script type="module" src="./options.ts"></script>

@@ -89,6 +89,37 @@ real site (GitHub works well).
 - [ ] With zero profiles saved, the dashboard shows the getting-started empty
       state; with a non-matching search, it shows the no-results state
 
+## Clipboard transfer
+- [ ] ⧉ on a profile copies it; the notice confirms
+- [ ] Ctrl+V anywhere in the popup imports a copied session
+- [ ] Pasting unrelated text does nothing (no error, no import)
+
+## Session data editor
+- [ ] Drawer lists every cookie with domain/path, flags and expiry, plus both
+      storage areas
+- [ ] Editing a cookie value, saving, then switching into that profile uses
+      the edited value
+- [ ] Removing a cookie and adding a storage key both persist
+- [ ] Saving a cookie with a blank name is refused with a clear message
+
+## Password protection
+- [ ] Security → turn on protection: requires 8+ chars, both fields matching,
+      and a confirmation of the no-recovery warning
+- [ ] After enabling, `chrome.storage.local` holds a `vault` and **no**
+      readable `profiles` key (check via the service worker console:
+      `chrome.storage.local.get(console.log)`)
+- [ ] Popup and dashboard both show the unlock gate after Lock now
+- [ ] Wrong password is rejected; correct password unlocks both surfaces
+- [ ] Toolbar badge shows 🔒 while locked (no profile count leaks)
+- [ ] Auto-lock: set it to 1 minute, leave the browser idle, confirm it locks
+- [ ] Using the extension repeatedly keeps it unlocked (the idle timer resets)
+- [ ] Export while protected produces an encrypted file (open it — no cookie
+      values visible); importing it asks for that password
+- [ ] Wrong password on an encrypted import is rejected without corrupting
+      existing profiles
+- [ ] Turning protection off restores readable profiles and everything works
+- [ ] Locking does not lose data: unlock again and all profiles are intact
+
 ## Regression basics
 - [ ] `npm test` passes
 - [ ] `npm run typecheck` passes

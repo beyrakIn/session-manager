@@ -1,6 +1,6 @@
 import { hostFromSiteKey, registrableDomain, siteKeyFromUrl } from '../lib/site'
 import { getActiveMap, getProfiles } from '../lib/store'
-import { serializeExport } from '../lib/transfer'
+import { parseEncryptedExport, serializeExport } from '../lib/transfer'
 import type { BgResponse, SessionProfile } from '../lib/types'
 
 const COLORS = ['#ef4444', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#6b7280']
@@ -19,6 +19,8 @@ const exportBtn = $<HTMLButtonElement>('export')
 const importBtn = $<HTMLButtonElement>('import-btn')
 const importFile = $<HTMLInputElement>('import-file')
 const manageAllBtn = $<HTMLButtonElement>('manage-all')
+const unlockForm = $<HTMLFormElement>('unlock-form')
+const unlockPass = $<HTMLInputElement>('unlock-pass')
 
 // Available on every page, including ones we can't manage sessions on.
 manageAllBtn.addEventListener('click', () => chrome.runtime.openOptionsPage())
@@ -46,7 +48,41 @@ async function send(msg: unknown): Promise<BgResponse> {
 
 void init()
 
+/**
+ * While the vault is locked the popup shows only the unlock form — no site
+ * name, no profile list, no export.
+ */
+async function gateOnLock(): Promise<boolean> {
+  const res = await send({ type: 'lockState' })
+  if (!res.ok || !res.lock?.locked) return false
+
+  unlockForm.hidden = false
+  formEl.hidden = true
+  freshBtn.disabled = true
+  exportBtn.disabled = true
+  importBtn.disabled = true
+  listEl.replaceChildren()
+  siteEl.textContent = 'Locked'
+  unlockPass.focus()
+
+  unlockForm.addEventListener('submit', (e) => {
+    e.preventDefault()
+    void (async () => {
+      const r = await send({ type: 'unlock', passphrase: unlockPass.value })
+      if (!r.ok) {
+        showNotice(r.error)
+        unlockPass.select()
+        return
+      }
+      window.location.reload() // start again, now unlocked
+    })()
+  })
+  return true
+}
+
 async function init(): Promise<void> {
+  if (await gateOnLock()) return
+
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
   const key = tab?.id !== undefined && tab.url ? siteKeyFromUrl(tab.url) : null
   if (!key || tab?.id === undefined) {
@@ -258,9 +294,14 @@ function wirePasteImport(): void {
 function wireTransferEvents(): void {
   exportBtn.addEventListener('click', () => {
     void (async () => {
-      const blob = new Blob([serializeExport(await getProfiles())], {
-        type: 'application/json',
-      })
+      // The worker owns the vault key, so it produces the file — encrypted
+      // when protection is on, plain JSON when it isn't.
+      const res = await send({ type: 'exportAll' })
+      if (!res.ok || !res.json) {
+        showNotice(`Export failed: ${res.ok ? 'no data returned' : res.error}`)
+        return
+      }
+      const blob = new Blob([res.json], { type: 'application/json' })
       const a = document.createElement('a')
       a.href = URL.createObjectURL(blob)
       a.download = `session-manager-export-${new Date().toISOString().slice(0, 10)}.json`
@@ -279,7 +320,12 @@ function wireTransferEvents(): void {
       setBusy(true)
       try {
         const json = await file.text()
-        const res = await send({ type: 'importProfiles', json })
+        // Encrypted backups carry their own salt, so they need the password
+        // they were made with — not necessarily the current one.
+        const passphrase = parseEncryptedExport(json)
+          ? (prompt('This backup is encrypted. Enter its password:') ?? '')
+          : undefined
+        const res = await send({ type: 'importProfiles', json, passphrase })
         if (!res || !res.ok) {
           showNotice(`Import failed: ${res ? res.error : 'no response from service worker'}`)
           return

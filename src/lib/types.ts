@@ -40,6 +40,12 @@ export interface DeleteProfileRequest {
 export interface ImportProfilesRequest {
   type: 'importProfiles'
   json: string
+  /** Required only when the file is an encrypted (version 2) export. */
+  passphrase?: string
+}
+
+export interface ExportAllRequest {
+  type: 'exportAll'
 }
 
 /** Edits presentation fields only — never session data. */
@@ -65,6 +71,40 @@ export interface UpdateProfileDataRequest {
   sessionStorage: Record<string, string>
 }
 
+export interface LockRequest {
+  type: 'lock'
+}
+
+export interface UnlockRequest {
+  type: 'unlock'
+  passphrase: string
+}
+
+export interface EnableProtectionRequest {
+  type: 'enableProtection'
+  passphrase: string
+}
+
+export interface DisableProtectionRequest {
+  type: 'disableProtection'
+  passphrase: string
+}
+
+export interface SetLockTimeoutRequest {
+  type: 'setLockTimeout'
+  minutes: number
+}
+
+export interface LockStateRequest {
+  type: 'lockState'
+}
+
+export interface LockState {
+  protected: boolean
+  locked: boolean
+  timeoutMinutes: number
+}
+
 export type BgRequest =
   | SwitchRequest
   | SaveNewRequest
@@ -73,7 +113,14 @@ export type BgRequest =
   | UpdateProfileRequest
   | DeleteProfilesRequest
   | UpdateProfileDataRequest
+  | LockRequest
+  | UnlockRequest
+  | EnableProtectionRequest
+  | DisableProtectionRequest
+  | SetLockTimeoutRequest
+  | LockStateRequest
+  | ExportAllRequest
 
 export type BgResponse =
-  | { ok: true; warnings: string[]; imported?: number }
-  | { ok: false; error: string }
+  | { ok: true; warnings: string[]; imported?: number; lock?: LockState; json?: string }
+  | { ok: false; error: string; locked?: true }

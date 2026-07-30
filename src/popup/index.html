@@ -12,6 +12,18 @@
 
     <div id="notice" hidden></div>
 
+    <form id="unlock-form" hidden>
+      <p class="lock-copy">Locked. Enter your password to use your saved sessions.</p>
+      <input
+        id="unlock-pass"
+        type="password"
+        placeholder="Password"
+        autocomplete="current-password"
+        required
+      />
+      <button type="submit">Unlock</button>
+    </form>
+
     <ul id="profiles"></ul>
 
     <form id="save-form">
