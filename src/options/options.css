@@ -80,8 +80,12 @@
 * { box-sizing: border-box; }
 
 /* Author rules like `#selection-bar { display: flex }` outrank the UA's
-   `[hidden] { display: none }`, so hidden elements would still render. */
+   `[hidden] { display: none }`, so hidden elements would still render.
+   The same applies to `#drawer { display: flex }` versus the UA's
+   `dialog:not([open]) { display: none }` — without this, closing a sheet
+   removes its backdrop but leaves the sheet itself on screen. */
 [hidden] { display: none !important; }
+dialog:not([open]) { display: none !important; }
 
 html, body { height: 100%; }
 
