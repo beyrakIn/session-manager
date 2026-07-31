@@ -1,5 +1,6 @@
 import { hostFromSiteKey, registrableDomain, siteKeyFromUrl } from '../lib/site'
 import { getActiveMap, getProfiles } from '../lib/store'
+import { PIN_LENGTH } from '../lib/secret'
 import { parseEncryptedExport, serializeExport } from '../lib/transfer'
 import type { BgResponse, SessionProfile } from '../lib/types'
 
@@ -63,6 +64,14 @@ async function gateOnLock(): Promise<boolean> {
   importBtn.disabled = true
   listEl.replaceChildren()
   siteEl.textContent = 'Locked'
+
+  // Ask for whatever the vault was created with.
+  if (res.lock.kind === 'pin') {
+    unlockPass.inputMode = 'numeric'
+    unlockPass.maxLength = PIN_LENGTH
+    unlockPass.placeholder = 'PIN'
+    unlockPass.autocomplete = 'one-time-code'
+  }
   unlockPass.focus()
 
   unlockForm.addEventListener('submit', (e) => {

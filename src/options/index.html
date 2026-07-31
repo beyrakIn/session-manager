@@ -111,7 +111,7 @@
         <button id="security-close" type="button" class="btn btn-icon" aria-label="Close">✕</button>
       </header>
 
-      <div id="drawer-body">
+      <div id="security-body" class="sheet-body">
         <section id="protect-off">
           <div class="section-head"><h3>Password protection</h3></div>
           <p class="prose">
@@ -120,14 +120,21 @@
             derived from that password. The key is never written to disk.
           </p>
           <p class="prose warn">
-            There is no recovery. If you forget the password, every saved session
-            is permanently unreadable.
+            There is no recovery. If you forget it, every saved session is
+            permanently unreadable.
           </p>
+
+          <div class="segmented kind-picker" role="group" aria-label="Credential type">
+            <button type="button" data-kind="password" class="on">Password</button>
+            <button type="button" data-kind="pin">6-digit PIN</button>
+          </div>
+          <p id="kind-note" class="prose subtle"></p>
+
           <form id="enable-form">
-            <input id="pass1" type="password" placeholder="New password (min 8 characters)"
-              autocomplete="new-password" minlength="8" required />
-            <input id="pass2" type="password" placeholder="Repeat password"
-              autocomplete="new-password" minlength="8" required />
+            <input id="pass1" type="password" placeholder="New password"
+              autocomplete="new-password" required />
+            <input id="pass2" type="password" placeholder="Repeat"
+              autocomplete="new-password" required />
             <button type="submit" class="btn btn-primary">Turn on protection</button>
           </form>
         </section>

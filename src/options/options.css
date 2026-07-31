@@ -697,10 +697,12 @@ tbody tr.flash { animation: flash 700ms var(--ease); }
   padding: 0;
   border: none;
   border-left: 1px solid var(--line);
+  border-radius: var(--r-lg) 0 0 var(--r-lg);
   background: var(--bg);
   color: var(--ink);
   display: flex;
   flex-direction: column;
+  box-shadow: -1px 0 0 var(--line-2), -24px 0 60px -12px rgba(10, 12, 16, 0.28);
 }
 #drawer[open] { animation: drawer-in 240ms var(--ease); }
 #drawer::backdrop {
@@ -714,23 +716,61 @@ tbody tr.flash { animation: flash 700ms var(--ease); }
 @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
 
 .drawer-head {
+  position: relative;
   display: flex;
   align-items: flex-start;
   gap: 16px;
-  padding: 18px 20px 14px;
+  padding: 20px 22px 16px;
   border-bottom: 1px solid var(--line);
   background: var(--surface);
+  /* A hairline of accent along the top edge reads as "this panel is active"
+     without adding a coloured block. */
+  box-shadow: inset 0 2px 0 var(--accent);
 }
-.drawer-head h2 { margin: 0; font-size: 16px; font-weight: 620; }
-.drawer-head p { margin: 3px 0 0; color: var(--ink-3); font-size: 12.5px; }
-.drawer-head .btn { margin-left: auto; }
+.drawer-head h2 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 640;
+  letter-spacing: -0.2px;
+}
+.drawer-head p { margin: 4px 0 0; color: var(--ink-3); font-size: 12.5px; }
+.drawer-head .btn {
+  margin-left: auto;
+  width: 30px;
+  height: 30px;
+  justify-content: center;
+  border-radius: 50%;
+  font-size: 14px;
+  color: var(--ink-3);
+}
+.drawer-head .btn:hover { color: var(--ink); background: var(--panel); }
 
-#drawer-body {
+#drawer-body,
+.sheet-body {
   flex: 1;
   overflow-y: auto;
-  padding: 16px 20px 24px;
+  padding: 18px 22px 28px;
   scrollbar-width: thin;
   scrollbar-color: var(--line-2) transparent;
+}
+
+/* Each security topic reads as its own card rather than a run of headings. */
+.sheet-body section {
+  padding: 16px 18px 18px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+}
+.prose.subtle { color: var(--ink-3); font-size: 12.5px; }
+.kind-picker { margin-bottom: 10px; width: fit-content; }
+#security-status:empty { display: none; }
+#security-status {
+  margin-top: 14px;
+  padding: 10px 12px;
+  border-radius: var(--r-md);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 500;
 }
 
 .section-head {
@@ -838,10 +878,12 @@ tbody tr.flash { animation: flash 700ms var(--ease); }
   padding: 0;
   border: none;
   border-left: 1px solid var(--line);
+  border-radius: var(--r-lg) 0 0 var(--r-lg);
   background: var(--bg);
   color: var(--ink);
   display: flex;
   flex-direction: column;
+  box-shadow: -1px 0 0 var(--line-2), -24px 0 60px -12px rgba(10, 12, 16, 0.28);
 }
 #security[open] { animation: drawer-in 240ms var(--ease); }
 #security::backdrop { background: rgba(10, 12, 16, 0.42); }

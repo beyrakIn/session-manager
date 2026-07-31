@@ -1,4 +1,5 @@
 import { exportKeyRaw, importKeyRaw, type EncryptedBlob } from './crypto'
+import type { SecretKind } from './secret'
 
 /**
  * Lock state. The derived key lives in chrome.storage.session — memory-only,
@@ -17,6 +18,8 @@ export interface Vault {
   salt: string
   iterations: number
   blob: EncryptedBlob
+  /** Absent on vaults created before PIN support — treat those as passwords. */
+  kind?: SecretKind
 }
 
 export interface LockSettings {

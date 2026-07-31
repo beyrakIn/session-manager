@@ -7,6 +7,7 @@ import {
   recordToEntries,
   type Entry,
 } from '../lib/inspect'
+import { PIN_LENGTH, secretError, type SecretKind } from '../lib/secret'
 import { siteUrlFromKey } from '../lib/site'
 import { getActiveMap, getProfiles } from '../lib/store'
 import type { BgResponse, LockState, SessionProfile } from '../lib/types'
@@ -916,6 +917,15 @@ async function saveDrawer(): Promise<void> {
 drawer.addEventListener('close', () => {
   draft = null
 })
+drawer.addEventListener('click', (e) => {
+  // Clicking away from an editor with unsaved edits should not discard them
+  // silently, so confirm first.
+  if (e.target !== drawer) return
+  const r = drawer.getBoundingClientRect()
+  const outside =
+    e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom
+  if (outside && confirm('Close without saving your changes?')) drawer.close()
+})
 $('drawer-close').addEventListener('click', () => drawer.close())
 $('drawer-cancel').addEventListener('click', () => drawer.close())
 drawerSave.addEventListener('click', () => void withPending(drawerSave, saveDrawer))
@@ -932,10 +942,39 @@ const protectOff = $('protect-off')
 const protectOn = $('protect-on')
 const timeoutMins = $<HTMLInputElement>('timeout-mins')
 
+/** What the existing vault uses; drives the labels and input modes. */
+let currentKind: SecretKind = 'password'
+
+/**
+ * Native <dialog> ignores backdrop clicks. Dismissing by clicking away is what
+ * people try first, so wire it up — the click lands on the dialog itself only
+ * when it is outside the content box.
+ */
+function dismissOnBackdrop(dlg: HTMLDialogElement): void {
+  dlg.addEventListener('click', (e) => {
+    if (e.target !== dlg) return
+    const r = dlg.getBoundingClientRect()
+    const outside =
+      e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom
+    if (outside) dlg.close()
+  })
+}
+dismissOnBackdrop(securityDlg)
+
 async function refreshLockState(): Promise<LockState | null> {
   const res = await send({ type: 'lockState' })
   const lock = res.ok ? res.lock : undefined
   if (!lock) return null
+
+  currentKind = lock.kind
+  // Ask for the credential the vault was actually created with.
+  const pin = lock.kind === 'pin'
+  unlockPass.inputMode = pin ? 'numeric' : 'text'
+  unlockPass.maxLength = pin ? PIN_LENGTH : 128
+  unlockPass.placeholder = pin ? 'PIN' : 'Password'
+  $<HTMLInputElement>('new-pass').placeholder = pin ? 'New PIN' : 'New password'
+  $<HTMLInputElement>('cur-pass').placeholder = pin ? 'Current PIN' : 'Current password'
+  $<HTMLInputElement>('disable-pass').placeholder = pin ? 'Current PIN' : 'Current password'
 
   securityState.textContent = lock.protected ? (lock.locked ? 'Locked' : 'On') : 'Off'
   protectOff.hidden = lock.protected
@@ -985,17 +1024,52 @@ $('open-security').addEventListener('click', () => {
 })
 $('security-close').addEventListener('click', () => securityDlg.close())
 
+let newKind: SecretKind = 'password'
+
+const KIND_NOTE: Record<SecretKind, string> = {
+  password: 'Strongest option. Any length from 8 characters.',
+  pin: 'Faster to type, but far weaker: a 6-digit PIN has only a million combinations, and the encrypted file can be attacked offline. Session Manager doubles the key-derivation work for PINs, which slows that down but does not remove the risk.',
+}
+
+function applyKind(kind: SecretKind): void {
+  newKind = kind
+  const pin = kind === 'pin'
+  for (const el of [$<HTMLInputElement>('pass1'), $<HTMLInputElement>('pass2')]) {
+    el.type = 'password'
+    el.inputMode = pin ? 'numeric' : 'text'
+    el.maxLength = pin ? PIN_LENGTH : 128
+    el.autocomplete = pin ? 'one-time-code' : 'new-password'
+  }
+  $<HTMLInputElement>('pass1').placeholder = pin ? '6-digit PIN' : 'New password'
+  $('kind-note').textContent = KIND_NOTE[kind]
+}
+
+for (const b of document.querySelectorAll<HTMLButtonElement>('.kind-picker button')) {
+  b.addEventListener('click', () => {
+    document.querySelectorAll('.kind-picker button').forEach((x) => x.classList.remove('on'))
+    b.classList.add('on')
+    applyKind((b.dataset['kind'] as SecretKind) ?? 'password')
+  })
+}
+applyKind('password')
+
 $<HTMLFormElement>('enable-form').addEventListener('submit', (e) => {
   e.preventDefault()
   void (async () => {
     const p1 = $<HTMLInputElement>('pass1').value
     const p2 = $<HTMLInputElement>('pass2').value
-    if (p1 !== p2) {
-      securityStatus.textContent = 'The two passwords do not match.'
+    const invalid = secretError(newKind, p1)
+    if (invalid) {
+      securityStatus.textContent = invalid
       return
     }
-    if (!confirm('There is no way to recover a forgotten password. Continue?')) return
-    const res = await send({ type: 'enableProtection', passphrase: p1 })
+    if (p1 !== p2) {
+      securityStatus.textContent = 'The two entries do not match.'
+      return
+    }
+    const label = newKind === 'pin' ? 'PIN' : 'password'
+    if (!confirm(`There is no way to recover a forgotten ${label}. Continue?`)) return
+    const res = await send({ type: 'enableProtection', passphrase: p1, kind: newKind })
     securityStatus.textContent = res.ok
       ? 'Protection is on. Your sessions are now encrypted.'
       : res.error
@@ -1017,6 +1091,7 @@ $<HTMLFormElement>('change-form').addEventListener('submit', (e) => {
       type: 'changePassphrase',
       current: cur.value,
       next: next.value,
+      kind: currentKind,
     })
     securityStatus.textContent = res.ok ? 'Password changed.' : res.error
     if (res.ok) {

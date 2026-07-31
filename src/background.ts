@@ -10,7 +10,8 @@ import {
   newProfile,
   type SessionSnapshot,
 } from './lib/profiles'
-import { KDF_ITERATIONS, decryptJson, deriveKey, encryptJson, newSalt } from './lib/crypto'
+import { decryptJson, deriveKey, encryptJson, newSalt } from './lib/crypto'
+import { iterationsFor, secretError } from './lib/secret'
 import {
   LockedError,
   clearSessionKey,
@@ -438,7 +439,13 @@ chrome.runtime.onInstalled.addListener(() => void reconcileVault())
 
 async function lockState(): Promise<LockState> {
   const { timeoutMinutes } = await getLockSettings()
-  return { protected: await isProtected(), locked: await isLocked(), timeoutMinutes }
+  const vault = await getVault()
+  return {
+    protected: vault !== null,
+    locked: await isLocked(),
+    timeoutMinutes,
+    kind: vault?.kind ?? 'password',
+  }
 }
 
 /** Restart the idle countdown. Any successful unlocked operation extends it. */
@@ -473,18 +480,23 @@ async function unlockOp({ passphrase }: UnlockRequest): Promise<BgResponse> {
   return { ok: true, warnings: [], lock: await lockState() }
 }
 
-async function enableProtectionOp({ passphrase }: EnableProtectionRequest): Promise<BgResponse> {
+async function enableProtectionOp({
+  passphrase,
+  kind,
+}: EnableProtectionRequest): Promise<BgResponse> {
   if (await isProtected()) return { ok: false, error: 'Protection is already enabled' }
-  if (passphrase.length < 8) {
-    return { ok: false, error: 'Use a password of at least 8 characters' }
-  }
+  const invalid = secretError(kind, passphrase)
+  if (invalid) return { ok: false, error: invalid }
+
   const profiles = await getProfiles() // still plaintext at this point
   const salt = newSalt()
-  const key = await deriveKey(passphrase, salt, KDF_ITERATIONS)
+  const iterations = iterationsFor(kind)
+  const key = await deriveKey(passphrase, salt, iterations)
   await setVault({
     v: 1,
     salt,
-    iterations: KDF_ITERATIONS,
+    iterations,
+    kind,
     blob: await encryptJson(key, profiles),
   })
   // Only drop the readable copy once the encrypted one is committed — and
@@ -506,10 +518,12 @@ async function enableProtectionOp({ passphrase }: EnableProtectionRequest): Prom
 async function changePassphraseOp({
   current,
   next,
+  kind,
 }: ChangePassphraseRequest): Promise<BgResponse> {
   const vault = await getVault()
   if (!vault) return { ok: false, error: 'Protection is not enabled' }
-  if (next.length < 8) return { ok: false, error: 'Use a password of at least 8 characters' }
+  const invalid = secretError(kind, next)
+  if (invalid) return { ok: false, error: invalid }
 
   const oldKey = await deriveKey(current, vault.salt, vault.iterations)
   let profiles: SessionProfile[]
@@ -520,11 +534,13 @@ async function changePassphraseOp({
   }
   // Re-encrypt in place: the plaintext never touches chrome.storage.local.
   const salt = newSalt()
-  const key = await deriveKey(next, salt, KDF_ITERATIONS)
+  const iterations = iterationsFor(kind)
+  const key = await deriveKey(next, salt, iterations)
   await setVault({
     v: 1,
     salt,
-    iterations: KDF_ITERATIONS,
+    iterations,
+    kind,
     blob: await encryptJson(key, profiles),
   })
   try {

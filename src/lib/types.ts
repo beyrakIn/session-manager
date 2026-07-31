@@ -1,4 +1,5 @@
 import type { CapturedCookie } from './cookies'
+import type { SecretKind } from './secret'
 
 export interface SessionProfile {
   id: string
@@ -83,6 +84,7 @@ export interface UnlockRequest {
 export interface EnableProtectionRequest {
   type: 'enableProtection'
   passphrase: string
+  kind: SecretKind
 }
 
 export interface DisableProtectionRequest {
@@ -94,6 +96,7 @@ export interface ChangePassphraseRequest {
   type: 'changePassphrase'
   current: string
   next: string
+  kind: SecretKind
 }
 
 export interface SetLockTimeoutRequest {
@@ -109,6 +112,8 @@ export interface LockState {
   protected: boolean
   locked: boolean
   timeoutMinutes: number
+  /** Which credential unlocks it, so the UI can ask for the right thing. */
+  kind: SecretKind
 }
 
 export type BgRequest =
